@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 )
 
 const addKeyHashQuery = "addKeyHash"
@@ -25,7 +24,7 @@ func (db *pgDb) addKeyHash(ctx context.Context, tx *sql.Tx, keyHash, keyDescript
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
-		return errors.New("key hash already exists or no rows were updated")
+		return sql.ErrNoRows
 	}
 
 	return nil

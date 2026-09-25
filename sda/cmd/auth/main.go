@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -20,7 +22,9 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
 )
 
@@ -420,6 +424,21 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
+
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-auth")
+	if err != nil {
+		log.Errorf("failed to setup OTel SDK: %v", err)
+		os.Exit(1)
+	}
+	defer func() {
+		if err := shutdown(context.Background()); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	var oauth2Config oauth2.Config
 	var provider *oidc.Provider
 
@@ -455,9 +474,13 @@ func main() {
 	}
 
 	app.Use(sess.Handler())
+	otelMiddleware := otelhttp.NewMiddleware("http-server")
+	app.WrapRouter(func(w http.ResponseWriter, r *http.Request, router http.HandlerFunc) {
+		otelMiddleware(router).ServeHTTP(w, r)
+	})
 
 	// Connect to DB
-	authHandler.db, err = postgres.NewPostgresSQLDatabase()
+	authHandler.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		log.Error(err)
 		panic(err)
@@ -502,6 +525,7 @@ func main() {
 
 	app.UseGlobal(globalHeaders)
 
+	startupSpan.End()
 	if conf.Server.Cert != "" && conf.Server.Key != "" {
 		log.Infoln("Serving content using https")
 		err = app.Run(iris.TLS("0.0.0.0:8080", conf.Server.Cert, conf.Server.Key))

@@ -12,7 +12,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // s3CacheBlock is used to keep track of cached data
@@ -37,13 +39,19 @@ type s3SeekableReader struct {
 	chunkSize             uint64
 	ctx                   context.Context
 	cancel                context.CancelFunc
+	span                  observability.Span
 }
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
 	ctx, cancel := context.WithCancel(ctx)
+	ctx, span := observability.StartSpan(ctx, "storage.s3.reader.NewFileReadSeeker",
+		attribute.String("location", location),
+		attribute.String("filePath", filePath),
+	)
 
 	endpoint, bucket, err := parseLocation(location)
 	if err != nil {
+		span.End()
 		cancel()
 
 		return nil, err
@@ -51,6 +59,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 
 	client, endpointConf, err := reader.getS3ClientForEndpoint(ctx, endpoint)
 	if err != nil {
+		span.End()
 		cancel()
 
 		return nil, err
@@ -58,6 +67,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 
 	objectSize, err := reader.getFileSize(ctx, client, bucket, filePath)
 	if err != nil {
+		span.End()
 		cancel()
 
 		return nil, err
@@ -77,6 +87,7 @@ func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath 
 		chunkSize:             endpointConf.chunkSizeBytes,
 		ctx:                   ctx,
 		cancel:                cancel,
+		span:                  span,
 	}, nil
 }
 
@@ -85,6 +96,7 @@ func (r *s3SeekableReader) Close() error {
 		_ = r.objectReader.Close()
 	}
 	r.cancel()
+	r.span.End()
 
 	return nil
 }

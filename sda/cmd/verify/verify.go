@@ -26,10 +26,12 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type verify struct {
@@ -55,18 +57,31 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-verify")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
 	app := &verify{
 		schemaPath: verifyconfig.SchemaPath(),
 		routingKey: verifyconfig.RoutingKey(),
 	}
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
 	defer func() {
 		if err := app.db.Close(); err != nil {
-			slog.Error("failed to close database", "error", err)
+			slog.Warn("failed to close database", slog.Any("error", err))
 		}
 	}()
 
@@ -84,7 +99,7 @@ func run() error {
 			return
 		}
 		if err := app.broker.Close(); err != nil {
-			slog.Error("could not close broker", "error", err)
+			slog.Warn("failed to close broker", slog.Any("error", err))
 		}
 	}()
 
@@ -98,17 +113,18 @@ func run() error {
 	}
 
 	consumeErr := make(chan error, 1)
-	log.Info("starting verify service")
+	slog.Info("verify service started")
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, verifyconfig.SourceQueue(), app.handleMessage)
 	}()
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case sig := <-sigc:
-		slog.Info("received signal, shutting down gracefully", "signal", sig)
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
 		cancel()
 
 		// Subscribe returns once the handler that was running has finished
@@ -118,16 +134,16 @@ func run() error {
 		select {
 		case err := <-consumeErr:
 			if err != nil && !errors.Is(err, context.Canceled) {
-				slog.Error("consumer failure during shutdown", "error", err)
+				slog.Error("consumer failure during shutdown", slog.Any("error", err))
 			}
 		case sig := <-sigc:
-			slog.Warn("received a second signal, not waiting for the running handler", "signal", sig)
+			slog.Warn("received a second signal, not waiting for the running handler", slog.String("signal", sig.String()))
 		}
 
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
-			slog.Error("consumer failure", "error", err, "source-queue", verifyconfig.SourceQueue())
+			slog.Error("consumer failure", slog.Any("error", err), slog.String("source-queue", verifyconfig.SourceQueue()))
 			cancel()
 
 			return err
@@ -140,37 +156,36 @@ func run() error {
 func (app *verify) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.schemaPath), message.Body); err != nil {
-		slog.Error("validation of incoming message failed", "error", err, "message-key", message.Key)
+		slog.Error("validation of incoming message failed", "error", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "validation of incoming message failed")}, nil
+		return []func(){app.errorQueue(ctx, message, "validation of incoming message failed")}, nil
 	}
 
 	var ingestionVerification schema.IngestionVerification
 	// we unmarshal the message in the validation step so this is safe to do
 	_ = json.Unmarshal(message.Body, &ingestionVerification)
 
-	slog.Info(
-		"Received work",
-		slog.String("message-key", message.Key),
-		slog.String("file-id", ingestionVerification.FileID),
-		slog.String("file-path", ingestionVerification.FilePath),
-		slog.String("user", ingestionVerification.User),
+	span.SetAttributes(
+		attribute.String("file-id", ingestionVerification.FileID),
+		attribute.String("file-path", ingestionVerification.FilePath),
+		attribute.String("user", ingestionVerification.User),
 	)
 
 	// If the file has been canceled by the uploader, don't spend time working on it.
 	status, err := app.db.GetFileStatus(ctx, ingestionVerification.FileID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			slog.Error("file status not found", slog.String("file-id", ingestionVerification.FileID))
+			span.Error("file status not found", err)
 
-			return []func(){app.errorQueue(message, "file status not found")}, nil
+			return []func(){app.errorQueue(ctx, message, "file status not found")}, nil
 		}
 
-		slog.Error("failed to get file status",
-			slog.String("file-id", ingestionVerification.FileID),
+		span.Warn("failed to get file status",
 			slog.Any("error", err),
 		)
 
@@ -178,10 +193,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	}
 
 	if status == "disabled" || status == "removed" {
-		slog.Info("file is disabled or removed, stopping verification",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.String("status", status),
-		)
+		span.Info("file is disabled or removed, stopping verification", slog.String("status", status))
 
 		return nil, nil
 	}
@@ -189,62 +201,50 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	header, err := app.db.GetHeader(ctx, ingestionVerification.FileID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			slog.Error("file header not found", slog.String("file-id", ingestionVerification.FileID))
+			span.Error("file header not found", err)
 
-			return []func(){app.errorQueue(message, "file header not found")}, nil
+			return []func(){app.errorQueue(ctx, message, "file header not found")}, nil
 		}
 
-		slog.Error("failed to get file header",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to get file header", slog.Any("error", err))
 
 		return nil, err
 	}
 
 	archiveLocation, err := app.db.GetArchiveLocation(ctx, ingestionVerification.FileID)
 	if err != nil {
-		slog.Error("failed to get archive location",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Error("failed to get archive location", err)
 
 		return nil, err
 	}
 	if archiveLocation == "" {
-		slog.Error("archive location for file not known",
-			slog.String("file-id", ingestionVerification.FileID),
-		)
+		span.Error("archive location for file not known", nil)
+
 		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error": "archive location for file not known"}`, string(message.Body)); err != nil {
-			slog.Error("failed to update file event log to error",
-				slog.String("file-id", ingestionVerification.FileID),
+			slog.Warn("failed to update file event log to error",
 				slog.Any("error", err),
 			)
 
 			return nil, err
 		}
 
-		return []func(){app.errorQueue(message, "archive location for file not known")}, nil
+		return []func(){app.errorQueue(ctx, message, "archive location for file not known")}, nil
 	}
 
 	file := new(database.FileInfo)
 	file.Size, err = app.archiveReader.GetFileSize(ctx, archiveLocation, ingestionVerification.ArchivePath)
 	if err != nil { //nolint:nestif
-		slog.Error("failed to get file size from archive storage",
-			slog.String("file-id", ingestionVerification.FileID),
+		span.Warn("failed to get file size from archive storage",
 			slog.Any("error", err),
 		)
 		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
 			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"file not found in archive storage"}`, string(message.Body)); err != nil {
-				slog.Error("failed to update file event log to error",
-					slog.String("file-id", ingestionVerification.FileID),
-					slog.Any("error", err),
-				)
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 				return nil, err
 			}
 
-			return []func(){app.errorQueue(message, "file not found in archive storage")}, nil
+			return []func(){app.errorQueue(ctx, message, "file not found in archive storage")}, nil
 		}
 
 		return nil, err
@@ -253,10 +253,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	archivedChecksum := sha256.New()
 	f, err := app.archiveReader.NewFileReader(ctx, archiveLocation, ingestionVerification.ArchivePath)
 	if err != nil {
-		slog.Error("failed to read file from archive storage",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to read file from archive storage", slog.Any("error", err))
 
 		return nil, err
 	}
@@ -275,16 +272,10 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	}
 
 	if key == nil {
-		slog.Error("no matching key found for file",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.String("archive-path", ingestionVerification.ArchivePath),
-		)
+		span.Error("no matching key found for file", nil)
 
 		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"no matching c4gh key found for file"}`, string(message.Body)); err != nil {
-			slog.Error("failed to update file event log to error",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 			return nil, err
 		}
@@ -295,21 +286,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archivedChecksum))
 	c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
 	if err != nil {
-		slog.Error("failed to open c4gh decryptor stream",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.String("archive-path", ingestionVerification.ArchivePath),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to open c4gh decryptor stream", slog.Any("error", err))
 
 		return nil, err
 	}
 	defer func() {
 		if err := c4ghr.Close(); err != nil {
-			slog.Error("failed to close crypt4gh reader",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.String("archive-path", ingestionVerification.ArchivePath),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to close crypt4gh reader", slog.Any("error", err))
 		}
 	}()
 
@@ -319,18 +302,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 
 	if file.DecryptedSize, err = io.Copy(decryptedChecksum, stream); err != nil {
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
-			slog.Warn("context canceled while decrypting file",
-				slog.String("file-id", ingestionVerification.FileID),
-			)
+			span.Warn("context canceled while decrypting file")
 
 			return nil, err
 		}
-		slog.Error("failed to copy decrypted data",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Error("failed to copy decrypted data", err)
 
-		return []func(){app.errorQueue(message, "failed to copy decrypted data")}, nil
+		return []func(){app.errorQueue(ctx, message, "failed to copy decrypted data")}, nil
 	}
 
 	// At this point we should do checksum comparison
@@ -341,21 +319,15 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	case ingestionVerification.ReVerify:
 		decrypted, err := app.db.GetDecryptedChecksum(ctx, ingestionVerification.FileID)
 		if err != nil {
-			slog.Error("failed to get unencrypted checksum for file",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to get unencrypted checksum for file", slog.Any("error", err))
 
 			return nil, err
 		}
 
 		if file.DecryptedChecksum != decrypted {
-			slog.Error("decrypted checksum don't match for file", slog.String("file-id", ingestionVerification.FileID))
+			span.Error("decrypted checksum don't match for file", nil)
 			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(message.Body)); err != nil {
-				slog.Error("failed to update file event log to error",
-					slog.String("file-id", ingestionVerification.FileID),
-					slog.Any("error", err),
-				)
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 				return nil, err
 			}
@@ -364,12 +336,9 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		}
 
 		if file.ArchivedChecksum != ingestionVerification.EncryptedChecksums[0].Value {
-			slog.Error("archived checksum don't match for file", slog.String("file-id", ingestionVerification.FileID))
+			span.Error("archived checksum don't match for file", nil)
 			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"archived checksum don't match"}`, string(message.Body)); err != nil {
-				slog.Error("failed to update file event log to error",
-					slog.String("file-id", ingestionVerification.FileID),
-					slog.Any("error", err),
-				)
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 				return nil, err
 			}
@@ -393,18 +362,15 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	verifiedMessage, _ := json.Marshal(&c)
 	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession-request.json", app.schemaPath), verifiedMessage)
 	if err != nil {
-		slog.Error("validation of outgoing message failed", "error", err, "message-key", message.Key)
+		span.Error("validation of outgoing message failed", err)
 
 		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(message, "validation of outgoing message failed")}, nil
+		return []func(){app.errorQueue(ctx, message, "validation of outgoing message failed")}, nil
 	}
 
 	storedFileInfo, err := app.db.GetFileInfo(ctx, ingestionVerification.FileID)
 	if err != nil {
-		slog.Error("failed to get file info",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to get file info", slog.Any("error", err))
 
 		return nil, err
 	}
@@ -412,12 +378,9 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	if storedFileInfo.DecryptedChecksum != "" && storedFileInfo.DecryptedChecksum != file.DecryptedChecksum {
 		// This indicates that the file has been verified previously and reuploaded & ingested without first being cancelled
 
-		slog.Error("decrypted checksum don't match for file", slog.String("file-id", ingestionVerification.FileID))
+		span.Error("decrypted checksum don't match for file", nil)
 		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(message.Body)); err != nil {
-			slog.Error("failed to update file event log to error",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 			return nil, err
 		}
@@ -427,13 +390,9 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 
 	if storedFileInfo.ArchivedChecksum != "" && storedFileInfo.ArchivedChecksum != file.ArchivedChecksum {
 		// This indicates that the file has been verified previously then reuploaded & ingested without first being cancelled
-
-		slog.Error("archived checksum don't match for file", slog.String("file-id", ingestionVerification.FileID))
+		span.Error("archived checksum don't match for file", nil)
 		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"archived checksum don't match"}`, string(message.Body)); err != nil {
-			slog.Error("failed to update file event log to error",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
 
 			return nil, err
 		}
@@ -443,13 +402,13 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		slog.Error("failed to begin transaction", slog.Any("error", err), slog.String("file-id", ingestionVerification.FileID))
+		span.Warn("failed to begin transaction", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			slog.Error("failed to rollback transaction", slog.Any("error", err), slog.String("file-id", ingestionVerification.FileID))
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
@@ -458,53 +417,38 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	status, err = tx.GetFileStatus(ctx, ingestionVerification.FileID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			slog.Error("file status not found after verification", slog.String("file-id", ingestionVerification.FileID))
+			span.Error("file status not found after verification", err)
 
-			return []func(){app.errorQueue(message, "file status not found after verification")}, nil
+			return []func(){app.errorQueue(ctx, message, "file status not found after verification")}, nil
 		}
 
-		slog.Error("failed to get file status after verification",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to get file status after verification", slog.Any("error", err))
 
 		return nil, err
 	}
 
 	if status == "disabled" || status == "removed" {
-		slog.Info("file was disabled or removed during verification",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.String("status", status),
-		)
+		span.Info("file was disabled or removed during verification", slog.String("status", status))
 
 		return nil, nil
 	}
 
 	if storedFileInfo.DecryptedChecksum == "" || storedFileInfo.ArchivedChecksum == "" {
 		if err := tx.SetVerified(ctx, file, ingestionVerification.FileID); err != nil {
-			slog.Error("failed to set file as verified",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
+			span.Warn("failed to set file as verified", slog.Any("error", err))
 
 			return nil, err
 		}
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, ingestionVerification.FileID, "verified", "verify", "{}", string(verifiedMessage)); err != nil {
-		slog.Error("failed to update file event log to verified",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
+		span.Warn("failed to update file event log to verified", slog.Any("error", err))
 
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		slog.Error("failed to commit transaction",
-			slog.Any("error", err),
-			slog.String("file-id", ingestionVerification.FileID),
-		)
+		span.Warn("failed to commit transaction", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -514,34 +458,29 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		Key:  ingestionVerification.FileID,
 		Body: verifiedMessage,
 	}); err != nil {
-		slog.Error("failed to publish verified message",
-			slog.String("file-id", ingestionVerification.FileID),
+		span.Error("failed to publish verified message",
+			err,
 			slog.String("routing-key", app.routingKey),
-			slog.Any("error", err),
 		)
 
 		return nil, err
 	}
 
-	slog.Info("Successfully verified file",
-		slog.String("file-id", ingestionVerification.FileID),
-		slog.String("file-path", ingestionVerification.FilePath),
-	)
-
 	return nil, nil
 }
 
-func (app *verify) errorQueue(originMessage *broker.Message, errorQueueReason string) func() {
+func (app *verify) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
 	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			slog.Error("failed to publish to error queue", "error", err, "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
-
-			return
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
 		}
-		slog.Info("published message to error queue", "message-key", originMessage.Key, "error-queue-reason", errorQueueReason)
 	}
 }

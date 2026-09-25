@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add observability package which adds support for tracing and metrics collecting and exporting with OpenTelemetry
+  - See [Observability README.md](internal/observability/README.md) for additional information
+  - Add OpenTelemetry instrumentation for the PostgreSQL database connection
+  - Add support for injecting/extracting trace headers on the broker rabbitmq to support distributed tracing
+  - Add tracing in the storage reader/writer libraries for s3 and posix
+- Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
+  - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
+
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
@@ -16,7 +25,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - finalize: commit the backup in its own transaction before setting the accession ID
   - finalize: re-check the file status under the row lock so a cancel during the backup copy is not overwritten by "backed up" or "ready"
   - both: remove the freshly written archive/backup object when the database work fails before the commit is attempted
-
 
 ## [4.0.0] - 2026-09-21
 

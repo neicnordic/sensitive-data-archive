@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
-	log "github.com/sirupsen/logrus"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 )
 
 // hasDatasetAccess checks if the user has access to a specific dataset.
@@ -40,6 +41,9 @@ type fileInfo struct {
 // ListDatasets returns a paginated list of dataset IDs the user has access to.
 // GET /datasets
 func (h *Handlers) ListDatasets(c *gin.Context) {
+	ctx, span := observability.StartSpan(c.Request.Context(), "ListDatasets")
+	defer span.End()
+
 	authCtx, ok := middleware.GetAuthContext(c)
 	if !ok {
 		problemJSON(c, http.StatusUnauthorized, "authentication required")
@@ -51,13 +55,13 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 	var err error
 
 	if config.JWTAllowAllData() {
-		datasets, err = h.db.GetAllDatasets(c.Request.Context())
+		datasets, err = h.db.GetAllDatasets(ctx)
 	} else {
-		datasets, err = h.db.GetUserDatasets(c.Request.Context(), authCtx.Datasets)
+		datasets, err = h.db.GetUserDatasets(ctx, authCtx.Datasets)
 	}
 
 	if err != nil {
-		log.Errorf("failed to retrieve datasets: %v", err)
+		span.Warn("failed to retrieve datasets", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve datasets")
 
 		return
@@ -136,6 +140,9 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 // GetDataset returns metadata for a specific dataset.
 // GET /datasets/:datasetId
 func (h *Handlers) GetDataset(c *gin.Context) {
+	ctx, span := observability.StartSpan(c.Request.Context(), "GetDataset")
+	defer span.End()
+
 	datasetID := c.Param("datasetId")
 
 	authCtx, ok := middleware.GetAuthContext(c)
@@ -152,9 +159,9 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 		return
 	}
 
-	info, err := h.db.GetDatasetInfo(c.Request.Context(), datasetID)
+	info, err := h.db.GetDatasetInfo(ctx, datasetID)
 	if err != nil {
-		log.Errorf("failed to retrieve dataset info: %v", err)
+		span.Warn("failed to retrieve dataset info", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset info")
 
 		return
@@ -179,6 +186,9 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 // ListDatasetFiles returns a paginated list of files in a dataset.
 // GET /datasets/:datasetId/files
 func (h *Handlers) ListDatasetFiles(c *gin.Context) {
+	ctx, span := observability.StartSpan(c.Request.Context(), "ListDatasetFiles")
+	defer span.End()
+
 	datasetID := c.Param("datasetId")
 
 	authCtx, ok := middleware.GetAuthContext(c)
@@ -196,9 +206,9 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 	}
 
 	// Check dataset exists (consistent with GetDataset — no existence leakage)
-	exists, err := h.db.CheckDatasetExists(c.Request.Context(), datasetID)
+	exists, err := h.db.CheckDatasetExists(ctx, datasetID)
 	if err != nil {
-		log.Errorf("failed to check dataset existence: %v", err)
+		span.Warn("failed to check dataset existence", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to check dataset")
 
 		return
@@ -263,9 +273,9 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 		opts.CursorID = tok.CursorID
 	}
 
-	files, err := h.db.GetDatasetFilesPaginated(c.Request.Context(), datasetID, opts)
+	files, err := h.db.GetDatasetFilesPaginated(ctx, datasetID, opts)
 	if err != nil {
-		log.Errorf("failed to retrieve dataset files: %v", err)
+		span.Warn("failed to retrieve dataset files", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset files")
 
 		return

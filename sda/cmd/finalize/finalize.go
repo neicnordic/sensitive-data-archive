@@ -21,10 +21,12 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
+	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"go.opentelemetry.io/otel/attribute"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -57,11 +59,27 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	app.db, err = postgres.NewPostgresSQLDatabase()
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-finalize")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		if err := shutdown(ctx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+	}()
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer app.db.Close()
+	defer func() {
+		if err := app.db.Close(); err != nil {
+			slog.Error("failed to close database", slog.Any("error", err))
+		}
+	}()
 
 	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
@@ -76,7 +94,7 @@ func run() error {
 			return
 		}
 		if err := app.broker.Close(); err != nil {
-			log.Errorf("could not close broker, reason: %v", err)
+			slog.Error("could not close broker", slog.Any("error", err))
 		}
 	}()
 
@@ -94,21 +112,22 @@ func run() error {
 	}
 
 	if app.archiveReader == nil || app.backupWriter == nil {
-		log.Warn("archive or backup destination not configured, backup will not be performed.")
+		slog.Warn("archive or backup destination not configured, backup will not be performed.")
 	}
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	consumeErr := make(chan error, 1)
 	go func() {
 		consumeErr <- app.broker.Subscribe(ctx, appconf.SourceQueue(), app.handleMessage)
 	}()
-	log.Info("Starting finalize service")
+	slog.Info("finalize service started")
 
 	select {
 	case sig := <-sigc:
-		log.Info("received signal, shutting down gracefully", "signal", sig)
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
 		cancel()
 
 		// Subscribe returns once the handler that was running has finished
@@ -127,7 +146,7 @@ func run() error {
 		return nil
 	case err := <-consumeErr:
 		if !errors.Is(err, context.Canceled) {
-			log.Errorf("consumer failure, reason: %v", err)
+			slog.Error("consumer failure", slog.Any("error", err))
 			cancel()
 
 			return err
@@ -140,12 +159,13 @@ func run() error {
 func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
-	log.Debugf("Received a message (correlation-id: %s, message: %s)", message.Key, message.Body)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", appconf.SchemaPath()), message.Body); err != nil {
-		log.Errorf("validation of incoming message (ingestion-accession) failed, correlation-id: %s, reason: %v ", message.Key, err)
+		span.Error("validation of incoming message (ingestion-accession) failed", err)
 
-		return []func(){app.errorQueue(message, "could not validate message")}, nil
+		return []func(){app.errorQueue(ctx, message, "could not validate message")}, nil
 	}
 
 	var ingestionAccession schema.IngestionAccession
@@ -154,10 +174,10 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	// If the file has been canceled by the uploader, don't spend time working on it.
 	status, err := app.db.GetFileStatus(ctx, message.Key)
 	if err != nil {
-		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("failed to get file status", slog.Any("error", err))
 
 		if errors.Is(err, sql.ErrNoRows) {
-			return []func(){app.errorQueue(message, "file not recognized")}, nil
+			return []func(){app.errorQueue(ctx, message, "file not recognized")}, nil
 		}
 
 		return nil, err
@@ -166,15 +186,15 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	var callbacks []func()
 	switch status {
 	case "":
-		return []func(){app.errorQueue(message, "file not recognized")}, nil
+		return []func(){app.errorQueue(ctx, message, "file not recognized")}, nil
 	case "disabled", "removed":
-		log.Debugf("file with file-id: %s is disabled or removed, aborting work", message.Key)
+		span.Debug("file is disabled or removed, aborting work")
 
 		return nil, nil
 	case "verified", "enabled", "backed up":
 		callbacks, err = app.setAccession(ctx, &ingestionAccession, message)
 	case "ready":
-		log.Debugf("File with file-id: %s is already marked as ready.", message.Key)
+		span.Debug("file is already marked as ready")
 
 		// Here we send completion message again if file is already marked as ready
 		// This is to protect against scenarios where the setAccession transaction updating file was successful
@@ -185,16 +205,17 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 
 		return nil, nil
 	default:
-		log.Warnf("file with file-id: %s is not verified yet, aborting work", message.Key)
+		span.Warn("file is not verified yet, aborting work")
 
-		return nil, fmt.Errorf("file with file-id: %s is not verified yet, aborting work", message.Key)
+		return nil, errors.New("file is not verified yet, aborting work")
 	}
 
 	return callbacks, err
 }
 
 func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
-	log.Debugf("Backup of file: %s initiated", message.Key)
+	ctx, span := observability.StartSpan(ctx, "backupFile", attribute.String("file-id", message.Key))
+	defer span.End()
 
 	archiveData, err := app.db.GetArchived(ctx, message.Key)
 	if err != nil {
@@ -206,7 +227,7 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 
 	if archiveData.BackupLocation != "" && archiveData.BackupFilePath != "" {
-		log.Infof("skipping backup, file: %s already backed up", message.Key)
+		span.Info("skipping backup, file already backed up")
 
 		return nil, nil
 	}
@@ -218,7 +239,7 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 
 	if diskFileSize != archiveData.FileSize {
-		return []func(){app.errorQueue(message, "archive file size does not match registered file size")}, fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
+		return []func(){app.errorQueue(ctx, message, "archive file size does not match registered file size")}, fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
 	}
 
 	file, err := app.archiveReader.NewFileReader(ctx, archiveData.Location, archiveData.FilePath)
@@ -264,19 +285,19 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 		defer cancel()
 		if err := app.backupWriter.RemoveFile(cleanupCtx, backupLocation, archiveData.FilePath); err != nil {
-			log.Errorf("failed to remove file from backup during rollback, file-id: %s, location: %s, reason: %v", message.Key, backupLocation, err)
+			span.Error("failed to remove file from backup during rollback", err, slog.String("location", backupLocation))
 		}
 	}()
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		log.Errorf("failed to begin transaction, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("failed to begin transaction", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback transaction, file-id: %s, reason: %v", message.Key, err)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
@@ -305,23 +326,24 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Debugf("Backup of file: %s complete", message.Key)
-
 	return nil, nil
 }
 
 func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schema.IngestionAccession, message *brokerv2.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "setAccession", attribute.String("file-id", message.Key), attribute.String("file-accession-id", ingestionAccession.AccessionID))
+	defer span.End()
+
 	accessionIDExists, err := app.db.CheckAccessionIDExists(ctx, ingestionAccession.AccessionID, message.Key)
 	if err != nil {
-		log.Errorf("CheckAccessionIdExists failed, file-id: %s, reason: %v ", message.Key, err)
+		span.Warn("CheckAccessionIdExists failed", slog.Any("error", err))
 
 		return nil, err
 	}
 
 	if accessionIDExists == "duplicate" {
-		log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", message.Key, ingestionAccession.AccessionID)
+		span.Error("accession ID already exists in the system", nil)
 		// Send the message to an error queue so it can be analyzed.
-		return []func(){app.errorQueue(message, "Duplicate accession ID")}, nil
+		return []func(){app.errorQueue(ctx, message, "Duplicate accession ID")}, nil
 	}
 
 	if app.archiveReader != nil && app.backupWriter != nil {
@@ -331,65 +353,61 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		callbacks, err := app.backupFile(ctx, message)
 		switch {
 		case errors.Is(err, errFileCancelled):
-			log.Warnf("file with file-id: %s was cancelled during backup, aborting work", message.Key)
+			span.Warn("file was cancelled during backup, aborting work")
 
 			return nil, nil
-		case err != nil && callbacks != nil:
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
-			// Send the message to an error queue but don't requeue it
-			return callbacks, nil
 		case err != nil:
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+			span.Error("failed to backup file", err)
 
-			return nil, err
+			return callbacks, err
 		}
 	}
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		log.Errorf("failed to begin transaction, reason: %v", err)
+		span.Error("failed to begin transaction", err)
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback transaction, reason: %v", err)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
 	if accessionIDExists == "same" {
-		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
+		span.Info("file already has an accession ID, marking it as ready")
 	}
 
 	// SetAccessionID is always run, also when the accession ID is already set, because the
 	// update holds the row lock on the file for the rest of the transaction. The status read
 	// below then can not be overtaken by a cancel that commits between the backup and here.
 	if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
-		log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
+		span.Error("failed to set accessionID for file", err)
 
 		return nil, err
 	}
 
 	status, err := tx.GetFileStatus(ctx, message.Key)
 	if err != nil {
-		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("failed to get file status", slog.Any("error", err))
 
 		return nil, err
 	}
 	if status == "disabled" || status == "removed" {
-		log.Warnf("file with file-id: %s was cancelled before it could be marked as ready, aborting work", message.Key)
+		span.Warn("file was cancelled during verification, aborting work")
 
 		return nil, nil
 	}
 
 	if err := tx.UpdateFileEventLog(ctx, message.Key, "ready", "finalize", "{}", string(message.Body)); err != nil {
-		log.Errorf("set status ready failed, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("set status ready failed", slog.Any("error", err))
 
 		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
-		log.Errorf("failed to commit transaction, reason: %v", err)
+		span.Error("failed to commit transaction", err)
 		// requeue message as broker error is not expected and should succeed on retries
 		return nil, err
 	}
@@ -422,14 +440,18 @@ func (app *Finalize) sendCompleted(ctx context.Context, fileID string, ingestion
 	return app.broker.Publish(ctx, appconf.RoutingKey(), completedMessage)
 }
 
-func (app *Finalize) errorQueue(originMessage *brokerv2.Message, errorQueueReason string) func() {
+func (app *Finalize) errorQueue(ctx context.Context, originMessage *brokerv2.Message, errorQueueReason string) func() {
 	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
 		if originMessage.Headers == nil {
 			originMessage.Headers = make(map[string]any)
 		}
 		originMessage.Headers["error-queue-reason"] = errorQueueReason
-		if err := app.broker.Publish(context.Background(), "error", *originMessage); err != nil {
-			log.Errorf("failed to publish to error queue, reason: %v", err)
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
 		}
 	}
 }
