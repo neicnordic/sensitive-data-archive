@@ -35,12 +35,12 @@ spec:
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: minio-cert
-  namespace: minio
+  name: s3-cert
+  namespace: ceph
 spec:
-  secretName: minio-cert
+  secretName: s3-cert
   duration: 24h
-  commonName: minio
+  commonName: s3
   isCA: false
   privateKey:
     algorithm: ECDSA
@@ -49,10 +49,10 @@ spec:
     - server auth
   dnsNames:
     - localhost
-    - minio
-    - minio.minio
-    - minio.minio.svc
-    - minio.minio.svc.cluster.local
+    - s3
+    - s3.ceph
+    - s3.ceph.svc
+    - s3.ceph.svc.cluster.local
   ipAddresses:
     - 127.0.0.1
   issuerRef:
