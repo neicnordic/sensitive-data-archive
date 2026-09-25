@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	req.SetBasicAuth("guest", "guest")
 
 	// exponential backoff-retry, because the application in the container might not be ready to accept connections yet
-	if err := pool.Retry(func() error {
+	err = pool.Retry(func() error {
 		res, err := client.Do(req) // #nosec G704 -- request controlled by unit test
 		if err != nil {
 			return err
@@ -89,7 +89,8 @@ func TestMain(m *testing.M) {
 		_ = res.Body.Close()
 
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		if err := pool.Purge(rabbitmq); err != nil {
 			log.Panicf("Could not purge resource: %s", err)
 		}

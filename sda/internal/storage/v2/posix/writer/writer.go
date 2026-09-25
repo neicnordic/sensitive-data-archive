@@ -82,7 +82,7 @@ func findSizeAndObjectCountInDir(_ context.Context, dir string) (uint64, uint64,
 	totalObjects := uint64(0)
 	totalSize := uint64(0)
 
-	if err := filepath.Walk(dir, func(_ string, info fs.FileInfo, err error) error {
+	err := filepath.Walk(dir, func(_ string, info fs.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,8 @@ func findSizeAndObjectCountInDir(_ context.Context, dir string) (uint64, uint64,
 		totalObjects++
 
 		return nil
-	}); err != nil {
+	})
+	if err != nil {
 		return 0, 0, err
 	}
 

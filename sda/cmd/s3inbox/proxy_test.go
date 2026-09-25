@@ -1140,7 +1140,6 @@ func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
 	for round := 0; round < rounds; round++ {
 		start := make(chan struct{})
 		var wg sync.WaitGroup
-		wg.Add(workers)
 		for i := 0; i < workers; i++ {
 			n := round*workers + i
 
@@ -1173,8 +1172,7 @@ func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
 			mockDatabase.On("SetSubmissionFileSize", fileID, int64(321)).Return(nil).Once()
 			mockDatabase.On("UpdateFileEventLog", fileID, "uploaded", "inbox", "{}", mock.Anything).Return(nil).Once()
 
-			go func() {
-				defer wg.Done()
+			wg.Go(func() {
 				req := httptest.NewRequest(
 					http.MethodPut,
 					"/dummy/"+filePath,
@@ -1186,7 +1184,7 @@ func TestServeHTTP_concurrent_put_noRace(t *testing.T) {
 				<-start
 
 				p.ServeHTTP(rec, req)
-			}()
+			})
 		}
 		close(start)
 

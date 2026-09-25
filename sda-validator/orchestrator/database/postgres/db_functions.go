@@ -74,7 +74,7 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 
 		var validatorMessages, fileMessages, finishedAt sql.NullString
 
-		if err := rows.Scan(
+		err = rows.Scan(
 			&validatorResult.ValidatorID,
 			&validatorResult.Result,
 			&validatorMessages,
@@ -82,7 +82,8 @@ func (db *pgDb) readValidationResult(ctx context.Context, stmt *sql.Stmt, valida
 			&finishedAt,
 			&fileResult.FilePath,
 			&fileResult.Result,
-			&fileMessages); err != nil {
+			&fileMessages)
+		if err != nil {
 			return nil, err
 		}
 
@@ -154,13 +155,14 @@ func (db *pgDb) readValidationInformation(ctx context.Context, stmt *sql.Stmt, v
 		fileInformation := new(model.FileInformation)
 		var validatorsID string
 
-		if err := rows.Scan(
+		err = rows.Scan(
 			&validationInformation.ValidationID,
 			&fileInformation.FileID,
 			&fileInformation.FilePath,
 			&fileInformation.SubmissionFileSize,
 			&validatorsID,
-			&validationInformation.SubmissionUserID); err != nil {
+			&validationInformation.SubmissionUserID)
+		if err != nil {
 			return nil, err
 		}
 
@@ -210,7 +212,7 @@ func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 		validatorMessages.String = string(validatorMessagesJSON)
 	}
 
-	if _, err := stmt.ExecContext(ctx,
+	_, err := stmt.ExecContext(ctx,
 		params.FinishedAt.Format(time.RFC3339),
 		params.FileResult,
 		validatorMessages,
@@ -218,7 +220,8 @@ func (db *pgDb) updateFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 		params.ValidatorResult,
 		params.FileID,
 		params.ValidatorID,
-		params.ValidationID); err != nil {
+		params.ValidationID)
+	if err != nil {
 		return err
 	}
 
@@ -241,7 +244,7 @@ func (db *pgDb) allValidationJobsDone(ctx context.Context, stmt *sql.Stmt, valid
 }
 
 func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, params *model.InsertFileValidationJobParameters) error {
-	if _, err := stmt.ExecContext(ctx,
+	_, err := stmt.ExecContext(ctx,
 		params.ValidationID,
 		params.ValidatorID,
 		params.FileID,
@@ -249,7 +252,8 @@ func (db *pgDb) insertFileValidationJob(ctx context.Context, stmt *sql.Stmt, par
 		params.FileSubmissionSize,
 		params.SubmissionUser,
 		params.TriggeredBy,
-		params.StartedAt.Format(time.RFC3339)); err != nil {
+		params.StartedAt.Format(time.RFC3339))
+	if err != nil {
 		return err
 	}
 
@@ -268,10 +272,11 @@ func (db *pgDb) updateAllValidationJobFilesOnError(ctx context.Context, stmt *sq
 		validatorMessages.String = string(validatorMessagesJSON)
 	}
 
-	if _, err := stmt.ExecContext(ctx,
+	_, err := stmt.ExecContext(ctx,
 		time.Now().Format(time.RFC3339),
 		validatorMessages,
-		validationID); err != nil {
+		validationID)
+	if err != nil {
 		return err
 	}
 
