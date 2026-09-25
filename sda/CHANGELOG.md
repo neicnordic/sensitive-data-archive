@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
+
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
@@ -16,7 +20,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - finalize: commit the backup in its own transaction before setting the accession ID
   - finalize: re-check the file status under the row lock so a cancel during the backup copy is not overwritten by "backed up" or "ready"
   - both: remove the freshly written archive/backup object when the database work fails before the commit is attempted
-
 
 ## [4.0.0] - 2026-09-21
 
