@@ -366,10 +366,11 @@ func (app *rotateKey) handleMessage(ctx context.Context, message *broker.Message
 		return nil, err
 	}
 
-	if err := app.broker.Publish(ctx, app.reverifyRoutingKey, broker.Message{
+	err = app.broker.Publish(ctx, app.reverifyRoutingKey, broker.Message{
 		Key:  reverificationData.FileID,
 		Body: reVerifyMsg,
-	}); err != nil {
+	})
+	if err != nil {
 		slog.Error("failed to publish re verify message after database transaction committed",
 			slog.String("file-id", reverificationData.FileID),
 			slog.String("routing-key", app.reverifyRoutingKey),

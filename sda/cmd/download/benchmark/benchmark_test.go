@@ -68,11 +68,12 @@ func TestComparePayloadDigests(t *testing.T) {
 		t.Fatalf("expected equal digests, got error: %v", err)
 	}
 
-	if err := comparePayloadDigests(base, payloadDigest{
+	err := comparePayloadDigests(base, payloadDigest{
 		EncryptedBytes:  11,
 		PlaintextBytes:  8,
 		PlaintextSHA256: "abc",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("expected encrypted byte mismatch to be tolerated, got error: %v", err)
 	}
 

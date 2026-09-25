@@ -84,12 +84,13 @@ func run() error {
 
 	// Production safety guards
 	if config.Environment() == "production" {
-		if err := validateProductionConfig(productionConfig{
+		err := validateProductionConfig(productionConfig{
 			AllowAllData:   config.JWTAllowAllData(),
 			HMACSecret:     config.PaginationHMACSecret(),
 			GRPCClientCert: config.GRPCClientCert(),
 			GRPCClientKey:  config.GRPCClientKey(),
-		}); err != nil {
+		})
+		if err != nil {
 			return err
 		}
 	}

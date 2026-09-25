@@ -189,7 +189,7 @@ func (ts *WriterTestSuite) SetupSuite() {
 	ts.s3Mock2.buckets = map[string]map[string]string{}
 	ts.s3Mock2.server = httptest.NewServer(http.HandlerFunc(ts.s3Mock2.handler))
 
-	if err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(ts.configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   test:
     s3:
@@ -211,7 +211,8 @@ storage:
       max_size: 5kb
       max_buckets: 3
       bucket_prefix: bucket_in_2-
-`, ts.s3Mock1.server.URL, ts.s3Mock2.server.URL)), 0600); err != nil {
+`, ts.s3Mock1.server.URL, ts.s3Mock2.server.URL)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 

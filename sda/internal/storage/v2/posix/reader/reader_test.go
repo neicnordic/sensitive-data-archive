@@ -28,13 +28,14 @@ func (ts *ReaderTestSuite) SetupSuite() {
 	ts.dir1 = ts.T().TempDir()
 	ts.dir2 = ts.T().TempDir()
 
-	if err := os.WriteFile(filepath.Join(ts.dir1, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(ts.dir1, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   test:
     posix:
     - path: %s
     - path: %s
-`, ts.dir1, ts.dir2)), 0600); err != nil {
+`, ts.dir1, ts.dir2)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
@@ -56,7 +57,6 @@ storage:
 		ts.FailNow(err.Error())
 	}
 
-	var err error
 	ts.reader, err = NewReader("test")
 	if err != nil {
 		ts.FailNow(err.Error())
@@ -148,12 +148,13 @@ func (ts *ReaderTestSuite) TestPing_PathGone() {
 	configDir := ts.T().TempDir()
 	vanishDir := ts.T().TempDir()
 
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   ping_fail_test:
     posix:
     - path: %s
-`, vanishDir)), 0600); err != nil {
+`, vanishDir)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 
@@ -180,12 +181,13 @@ func (ts *ReaderTestSuite) TestPing_PathIsFile() {
 		ts.FailNow(err.Error())
 	}
 
-	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   ping_file_test:
     posix:
     - path: %s
-`, dir)), 0600); err != nil {
+`, dir)), 0600)
+	if err != nil {
 		ts.FailNow(err.Error())
 	}
 

@@ -39,7 +39,7 @@ func (a *mockAuthenticator) authenticate(c *gin.Context) {
 func (ts *RbacTestSuite) SetupSuite() {
 	ts.tempDir = ts.T().TempDir()
 
-	if err := os.WriteFile(filepath.Join(ts.tempDir, "rbac.policy"), []byte(`
+	err := os.WriteFile(filepath.Join(ts.tempDir, "rbac.policy"), []byte(`
 {
   "policy": [
 	{
@@ -65,7 +65,8 @@ func (ts *RbacTestSuite) SetupSuite() {
 	  "rolebinding": "submitter"
 	}
   ]
-}`), 0600); err != nil {
+}`), 0600)
+	if err != nil {
 		ts.FailNow("failed to write rbac policy file due to %v", err)
 	}
 }
