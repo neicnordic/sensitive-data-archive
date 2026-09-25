@@ -33,8 +33,12 @@ else
     url=http://localhost:9000
 fi
 
+# memstore reports 1 GiB of capacity by default and RGW answers 507 once the
+# OSD is marked full, so raise what the OSD reports. Memory is only used for
+# the objects actually stored.
 cd /ceph
 MON=1 MGR=0 OSD=1 RGW=1 ./vstart.sh --new --memstore --without-dashboard \
+    -o "memstore_device_bytes = 4294967296" \
     --rgw_frontend "$frontend" --rgw_port "$rgw_port" >/tmp/vstart.log 2>&1 ||
     { cat /tmp/vstart.log; exit 1; }
 
