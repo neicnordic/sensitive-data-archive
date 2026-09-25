@@ -177,7 +177,11 @@ curl -s -X POST \
     -u guest:guest http://rabbitmq:15672/api/queues/sda/inbox/get \
     -d '{"count":1,"encoding":"auto","ackmode":"ack_requeue_false"}' > /dev/null
 
-short_segment_id=$(psql -U postgres -h postgres -d sda -At -c "SELECT id FROM sda.files WHERE submission_file_path = 'shortsegment.c4gh';")
+short_segment_id=$(psql -U postgres -h postgres -d sda -At -c "SELECT id FROM sda.files WHERE submission_file_path = 'shortsegment.c4gh' ORDER BY created_at DESC LIMIT 1;")
+if [ -z "$short_segment_id" ]; then
+    echo "::error::no file id found for shortsegment.c4gh; the inbox upload or ingest registration failed"
+    exit 1
+fi
 
 properties=$(
     jq -c -n \
