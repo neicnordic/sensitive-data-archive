@@ -87,8 +87,8 @@ fi
 ## The startup script is shared with the compose based integration tests.
 deploy_ceph_rgw() {
     kubectl -n ceph create configmap ceph-rgw \
-        --from-file=.github/integration/scripts/ceph-rgw.sh \
-        --from-file=.github/integration/scripts/s3.py
+        --from-file=.github/integration/scripts/ceph/ceph-rgw.sh \
+        --from-file=.github/integration/scripts/ceph/s3.py
     kubectl -n ceph create secret generic ceph-rgw-credentials \
         --from-literal=S3_ACCESS_KEY="$S3_ACCESS" \
         --from-literal=S3_SECRET_KEY="$S3_SECRET"
