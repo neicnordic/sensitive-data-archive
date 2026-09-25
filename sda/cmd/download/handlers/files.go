@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"mime"
 	"net/http"
 	"path/filepath"
@@ -19,7 +20,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/streaming"
 	"github.com/neicnordic/sensitive-data-archive/internal/observability"
-	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // resolvedBase holds the shared file resolution state.
@@ -41,10 +42,10 @@ type resolvedFile struct {
 // and storage resolution common to both full-download and content-only endpoints.
 // Returns (nil, false) if an error response was already sent.
 func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolvedBase, bool) {
-	ctx, span := observability.StartSpan(ctx, "resolveFileBase")
-	defer span.End()
-
 	fileID := c.Param("fileId")
+
+	ctx, span := observability.StartSpan(ctx, "resolveFileBase", attribute.String("file-id", fileID))
+	defer span.End()
 
 	// Get auth context
 	authCtx, ok := middleware.GetAuthContext(c)
@@ -58,7 +59,7 @@ func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolv
 	if !config.JWTAllowAllData() {
 		hasPermission, err := h.db.CheckFilePermission(ctx, fileID, authCtx.Datasets)
 		if err != nil {
-			log.Errorf("failed to check file permission: %v", err)
+			span.Error("failed to check file permission", err)
 			problemJSON(c, http.StatusInternalServerError, "failed to check file permission")
 
 			return nil, false
@@ -75,7 +76,7 @@ func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolv
 	// Get file from DB
 	file, err := h.db.GetFileByID(ctx, fileID)
 	if err != nil {
-		log.Errorf("failed to retrieve file info: %v", err)
+		span.Warn("failed to retrieve file info", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve file info")
 
 		return nil, false
@@ -90,7 +91,7 @@ func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolv
 	}
 
 	if file.ArchivePath == "" {
-		log.Errorf("file %s has no archive path", file.ID)
+		span.Warn("file has no archive path")
 		problemJSON(c, http.StatusInternalServerError, "file not in archive")
 
 		return nil, false
@@ -102,17 +103,17 @@ func (h *Handlers) resolveFileBase(ctx context.Context, c *gin.Context) (*resolv
 		location = file.ArchiveLocation
 	} else {
 		if h.storageReader == nil {
-			log.Error("storage reader not configured")
+			span.Error("storage reader not configured", nil)
 			problemJSON(c, http.StatusInternalServerError, "storage not configured")
 
 			return nil, false
 		}
 
-		log.Warnf("file %s has no archive_location stored, falling back to FindFile search", file.ID)
+		span.Warn("file has no archive_location stored, falling back to FindFile search")
 
 		location, err = h.storageReader.FindFile(ctx, file.ArchivePath)
 		if err != nil {
-			log.Errorf("failed to find file in storage: %v", err)
+			span.Error("failed to find file in storage", err)
 			problemJSON(c, http.StatusInternalServerError, "file not found in storage")
 
 			return nil, false
@@ -147,7 +148,7 @@ func (h *Handlers) resolveFileForDownload(ctx context.Context, c *gin.Context) (
 
 	// Validate file has header
 	if len(base.file.Header) == 0 {
-		log.Errorf("file %s has no header", base.file.ID)
+		span.Warn("file has no header")
 		problemJSON(c, http.StatusInternalServerError, "file header not available")
 
 		return nil, false
@@ -155,7 +156,7 @@ func (h *Handlers) resolveFileForDownload(ctx context.Context, c *gin.Context) (
 
 	// Re-encrypt header
 	if h.reencryptClient == nil {
-		log.Error("reencrypt client not configured")
+		span.Error("reencrypt client not configured", nil)
 		problemJSON(c, http.StatusInternalServerError, "reencrypt service not configured")
 
 		return nil, false
@@ -163,7 +164,7 @@ func (h *Handlers) resolveFileForDownload(ctx context.Context, c *gin.Context) (
 
 	newHeader, err := h.reencryptClient.ReencryptHeader(ctx, base.file.Header, publicKey)
 	if err != nil {
-		log.Errorf("failed to reencrypt header: %v", err)
+		span.Warn("failed to reencrypt header", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to prepare file for download")
 
 		return nil, false
@@ -207,7 +208,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 
 	// Open file reader from storage
 	if h.storageReader == nil {
-		log.Error("storage reader not configured")
+		span.Error("storage reader not configured", nil)
 		problemJSON(c, http.StatusInternalServerError, "storage not configured")
 		h.auditFailed(c, resolved.authCtx, file, "storage not configured")
 
@@ -216,7 +217,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 
 	fileReader, err := h.storageReader.NewFileReadSeeker(ctx, resolved.location, file.ArchivePath)
 	if err != nil {
-		log.Errorf("failed to open file: %v", err)
+		span.Warn("failed to open file", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to open file")
 		h.auditFailed(c, resolved.authCtx, file, "failed to open file")
 
@@ -268,7 +269,7 @@ func (h *Handlers) DownloadFile(c *gin.Context) {
 		Range:              rangeSpec,
 	})
 	if err != nil {
-		log.Errorf("error streaming file: %v", err)
+		span.Warn("error streaming file", slog.Any("error", err))
 		h.auditFailed(c, resolved.authCtx, file, "streaming error")
 
 		return
@@ -412,7 +413,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 
 	// Open file reader from storage
 	if h.storageReader == nil {
-		log.Error("storage reader not configured")
+		span.Error("storage reader not configured", nil)
 		problemJSON(c, http.StatusInternalServerError, "storage not configured")
 		h.auditFailed(c, resolved.authCtx, file, "storage not configured")
 
@@ -421,7 +422,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 
 	fileReader, err := h.storageReader.NewFileReadSeeker(ctx, resolved.location, file.ArchivePath)
 	if err != nil {
-		log.Errorf("failed to open file: %v", err)
+		span.Warn("failed to open file", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to open file")
 		h.auditFailed(c, resolved.authCtx, file, "failed to open file")
 
@@ -466,7 +467,7 @@ func (h *Handlers) GetFileContent(c *gin.Context) {
 		Range:           rangeSpec,
 	})
 	if err != nil {
-		log.Errorf("error streaming file content: %v", err)
+		span.Warn("error streaming file content", slog.Any("error", err))
 		h.auditFailed(c, resolved.authCtx, file, "streaming error")
 
 		return

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log/slog"
 	"net/http"
 	"slices"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/internal/observability"
-	log "github.com/sirupsen/logrus"
 )
 
 // hasDatasetAccess checks if the user has access to a specific dataset.
@@ -61,7 +61,7 @@ func (h *Handlers) ListDatasets(c *gin.Context) {
 	}
 
 	if err != nil {
-		log.Errorf("failed to retrieve datasets: %v", err)
+		span.Warn("failed to retrieve datasets", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve datasets")
 
 		return
@@ -161,7 +161,7 @@ func (h *Handlers) GetDataset(c *gin.Context) {
 
 	info, err := h.db.GetDatasetInfo(ctx, datasetID)
 	if err != nil {
-		log.Errorf("failed to retrieve dataset info: %v", err)
+		span.Warn("failed to retrieve dataset info", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset info")
 
 		return
@@ -208,7 +208,7 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 	// Check dataset exists (consistent with GetDataset — no existence leakage)
 	exists, err := h.db.CheckDatasetExists(ctx, datasetID)
 	if err != nil {
-		log.Errorf("failed to check dataset existence: %v", err)
+		span.Warn("failed to check dataset existence", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to check dataset")
 
 		return
@@ -275,7 +275,7 @@ func (h *Handlers) ListDatasetFiles(c *gin.Context) {
 
 	files, err := h.db.GetDatasetFilesPaginated(ctx, datasetID, opts)
 	if err != nil {
-		log.Errorf("failed to retrieve dataset files: %v", err)
+		span.Warn("failed to retrieve dataset files", slog.Any("error", err))
 		problemJSON(c, http.StatusInternalServerError, "failed to retrieve dataset files")
 
 		return

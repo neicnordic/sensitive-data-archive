@@ -78,9 +78,8 @@ func run() error {
 		return fmt.Errorf("failed to initialize database: %w", err)
 	}
 	defer func() {
-		log.Info("closing database connection...")
 		if err := database.Close(); err != nil {
-			log.Errorf("database close error: %v", err)
+			slog.Error("database close error", slog.Any("error", err))
 		}
 	}()
 
@@ -95,7 +94,7 @@ func run() error {
 			return fmt.Errorf("failed to initialize database cache: %w", err)
 		}
 		database.RegisterDatabase(cachedDB)
-		log.Info("Database caching enabled")
+		slog.Info("Database caching enabled")
 	}
 
 	// Production safety guards
@@ -128,7 +127,7 @@ func run() error {
 		}
 
 		handlers.SetPaginationSecret(b)
-		log.Warn("pagination.hmac-secret not configured: auto-generated random key. " +
+		slog.Warn("pagination.hmac-secret not configured: auto-generated random key. " +
 			"Page tokens will not survive restarts or work across replicas. " +
 			"Set pagination.hmac-secret for multi-replica deployments.")
 	}
@@ -146,8 +145,11 @@ func run() error {
 			return fmt.Errorf("failed to initialize visa validator: %w", err)
 		}
 		visaValidator = vv
-		log.Infof("GA4GH visa support enabled (source=%s, identity=%s, permission=%s)",
-			config.VisaSource(), config.VisaIdentityMode(), config.PermissionModel())
+		startupSpan.Info("GA4GH visa support enabled (=%s, =%s, =%s)",
+			slog.String("source", config.VisaSource()),
+			slog.String("identity", config.VisaIdentityMode()),
+			slog.String("permission", config.PermissionModel()),
+		)
 	}
 
 	// Initialize storage/v2 reader
@@ -155,7 +157,6 @@ func run() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize storage reader: %w", err)
 	}
-	log.Info("storage reader initialized")
 
 	// Initialize gRPC reencrypt client
 	reencryptOpts := []reencrypt.ClientOption{
@@ -171,10 +172,13 @@ func run() error {
 	reencryptClient := reencrypt.NewClient(config.GRPCHost(), config.GRPCPort(), reencryptOpts...)
 	defer func() {
 		if err := reencryptClient.Close(); err != nil {
-			log.Errorf("failed to close reencrypt client: %v", err)
+			slog.Error("failed to close reencrypt client", slog.Any("error", err))
 		}
 	}()
-	log.Infof("reencrypt client configured for %s:%d", config.GRPCHost(), config.GRPCPort())
+	startupSpan.Info("reencrypt client configured for %s:%d",
+		slog.String("host", config.GRPCHost()),
+		slog.Int("port", config.GRPCPort()),
+	)
 
 	// Setup HTTP server
 	router := gin.New()
@@ -237,10 +241,10 @@ func run() error {
 	go func() {
 		var err error
 		if config.APIServerCert() != "" && config.APIServerKey() != "" {
-			log.Infof("server listening at: https://%s", srv.Addr)
+			startupSpan.Info("server listening at: https://", slog.String("address", srv.Addr))
 			err = srv.ListenAndServeTLS(config.APIServerCert(), config.APIServerKey())
 		} else {
-			log.Infof("server listening at: http://%s", srv.Addr)
+			startupSpan.Info("server listening at: http://", slog.String("address", srv.Addr))
 			err = srv.ListenAndServe()
 		}
 
@@ -249,30 +253,30 @@ func run() error {
 		}
 	}()
 
+	slog.Info("download v2 service started")
 	startupSpan.End()
-	log.Info("service ready")
 
 	// Wait for shutdown signal
 	select {
-	case <-sigc:
-		log.Info("received shutdown signal")
+	case sig := <-sigc:
+		slog.Info("received shutdown signal", slog.String("signal", sig.String()))
 	case <-ctx.Done():
-		log.Info("context cancelled")
+		slog.Info("context cancelled")
 	case err := <-serverErr:
-		log.Errorf("server error: %v", err)
+		slog.Error("server error", slog.Any("error", err))
 	}
 
 	// Graceful shutdown
-	log.Info("shutting down server...")
+	slog.Info("shutting down server...")
 
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
-		log.Errorf("server shutdown error: %v", err)
+		slog.Error("server shutdown error", slog.Any("error", err))
 	}
 
-	log.Info("shutdown complete")
+	slog.Info("shutdown complete")
 
 	return nil
 }
@@ -287,24 +291,27 @@ func initVisaValidator() (*visa.Validator, error) {
 
 	allowInsecure := config.VisaAllowInsecureJKU()
 	if allowInsecure {
-		log.Warn("visa.allow-insecure-jku is enabled: HTTP JKU URLs are permitted (NOT for production use)")
+		slog.Warn("visa.allow-insecure-jku is enabled: HTTP JKU URLs are permitted (NOT for production use)")
 	}
 
 	trustedIssuers, err := visa.LoadTrustedIssuers(trustedPath, allowInsecure)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load trusted issuers: %w", err)
 	}
-	log.Infof("loaded %d trusted issuer+JKU pairs from %s", len(trustedIssuers), trustedPath)
+	slog.Info("loaded trusted issuer+JKU pairs",
+		slog.Int("issuers", len(trustedIssuers)),
+		slog.String("source", trustedPath),
+	)
 
 	// Discover userinfo URL if not explicitly configured
 	userinfoURL := config.VisaUserinfoURL()
 	if userinfoURL == "" && config.OIDCIssuer() != "" {
 		discovered, err := visa.DiscoverUserinfoURL(config.OIDCIssuer())
 		if err != nil {
-			log.Warnf("OIDC discovery failed: %v (userinfo will need to be configured explicitly)", err)
+			slog.Warn("OIDC discovery failed (userinfo will need to be configured explicitly)", slog.Any("error", err))
 		} else {
 			userinfoURL = discovered
-			log.Infof("discovered userinfo endpoint: %s", userinfoURL)
+			slog.Info("discovered userinfo", slog.String("endpoint", userinfoURL))
 		}
 	}
 

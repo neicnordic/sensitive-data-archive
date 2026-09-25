@@ -26,7 +26,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -120,7 +119,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("path", r.URL.Path),
 			slog.String("query", r.URL.RawQuery),
 		)
-		reportErrorToClient(http.StatusUnauthorized, "Unauthorized", w)
+		reportErrorToClient(span, http.StatusUnauthorized, "Unauthorized", w)
 
 		return
 	}
@@ -143,7 +142,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			slog.String("query", r.URL.RawQuery),
 		)
 
-		reportErrorToClient(http.StatusForbidden, "Forbidden", w)
+		reportErrorToClient(span, http.StatusForbidden, "Forbidden", w)
 	}
 }
 
@@ -156,7 +155,7 @@ func (p *proxy) internalServerError(span observability.Span, w http.ResponseWrit
 		slog.String("path", path),
 		slog.String("query", query),
 	)
-	reportErrorToClient(http.StatusInternalServerError, "Internal Error", w)
+	reportErrorToClient(span, http.StatusInternalServerError, "Internal Error", w)
 }
 
 // prepareForwardPathAndQuery prepares the new path and query to be used for the s3 request to be user specific when
@@ -229,7 +228,7 @@ func (p *proxy) forwardRequest(ctx context.Context, s3RequestType S3RequestType,
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, token.Subject())
 	if err != nil {
 		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
-		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+		reportErrorToClient(span, http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -256,7 +255,7 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
 	if err != nil {
 		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
-		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+		reportErrorToClient(span, http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -265,7 +264,7 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
 	if err != nil {
 		span.Warn("bad request", slog.String("user", token.Subject()), slog.Any("error", err))
-		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+		reportErrorToClient(span, http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -290,7 +289,7 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 		if err != nil {
 			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("failed to register file in database: %v", err))
 			if err := tx.Rollback(); err != nil {
-				log.Errorf("failed to rollback RegisterFile transaction, reason: %v", err)
+				span.Error("failed to rollback RegisterFile transaction", err)
 			}
 
 			return
@@ -336,7 +335,11 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 		}
 
 		if isReupload {
-			log.Infof("user: %s, reuploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
+			span.Info("user reuploaded file",
+				slog.String("file-path", filePath),
+				slog.String("file-id", fileID),
+				slog.String("checksum", checksum),
+			)
 			pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 			if err := p.sendInboxRemoveMessage(pubCtx, username, fileID, s3FilePath); err != nil {
 				p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, err)
@@ -346,7 +349,11 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 			}
 			pubCancel()
 		} else {
-			log.Infof("user: %s, uploaded file: %s, with id: %s, checksum: %s", username, filePath, fileID, checksum)
+			span.Info("user uploaded file",
+				slog.String("file-path", filePath),
+				slog.String("file-id", fileID),
+				slog.String("checksum", checksum),
+			)
 		}
 
 		jsonMessage, err := json.Marshal(message)
@@ -625,8 +632,8 @@ func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w
 	var err error
 	r.URL.Path, r.URL.RawQuery, err = p.prepareForwardPathAndQuery(s3RequestType, r.URL.Path, r.URL.RawQuery, username)
 	if err != nil {
-		log.Warnf("bad request from user %s: %v", token.Subject(), err)
-		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+		span.Warn("bad request from user", slog.Any("error", err))
+		reportErrorToClient(span, http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -634,8 +641,8 @@ func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w
 	s3FilePath := strings.Replace(r.URL.Path, "/"+p.s3Conf.bucket+"/", "", 1)
 	filePath, err := formatUploadFilePath(helper.AnonymizeFilepath(s3FilePath, username))
 	if err != nil {
-		log.Warnf("bad request from user %s: %v", token.Subject(), err)
-		reportErrorToClient(http.StatusBadRequest, "Bad Request", w)
+		span.Warn("bad request from user", slog.Any("error", err))
+		reportErrorToClient(span, http.StatusBadRequest, "Bad Request", w)
 
 		return
 	}
@@ -647,8 +654,8 @@ func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w
 		return
 	}
 	if fileID == "" {
-		log.Warnf("user: %s, attempted to remove file not eligible for removal: %s", username, filePath)
-		reportErrorToClient(http.StatusNotFound, "Not Found", w)
+		span.Warn("user: %s, attempted to remove file not eligible for removal", slog.String("file-path", filePath))
+		reportErrorToClient(span, http.StatusNotFound, "Not Found", w)
 
 		return
 	}
@@ -731,7 +738,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 }
 
 // Write the error and its status code to the response
-func reportErrorToClient(errorCode int, message string, w http.ResponseWriter) {
+func reportErrorToClient(span observability.Span, errorCode int, message string, w http.ResponseWriter) {
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
@@ -739,16 +746,14 @@ func reportErrorToClient(errorCode int, message string, w http.ResponseWriter) {
 	w.WriteHeader(errorCode)
 	xmlData, err := xml.Marshal(errorResponse)
 	if err != nil {
-		// errors are logged but otherwised ignored
-		log.Error(err)
+		span.Error("failed to marshal error response", err)
 
 		return
 	}
 	// write the error message to the response
 	_, err = io.Writer.Write(w, xmlData)
 	if err != nil {
-		// errors are logged but otherwised ignored
-		log.Error(err)
+		span.Error("failed to write response", err)
 	}
 }
 
