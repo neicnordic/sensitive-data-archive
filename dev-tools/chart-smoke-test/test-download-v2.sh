@@ -227,8 +227,8 @@ fi
 if ! kubectl get deploy minio >/dev/null 2>&1; then
     echo "Installing Ceph RGW as service minio..."
     kubectl create configmap ceph-rgw \
-        --from-file=.github/integration/scripts/ceph-rgw.sh \
-        --from-file=.github/integration/scripts/s3.py \
+        --from-file=.github/integration/scripts/ceph/ceph-rgw.sh \
+        --from-file=.github/integration/scripts/ceph/s3.py \
         --dry-run=client -o yaml | kubectl apply -f -
     kubectl apply -f - <<'MINIO_EOF'
 apiVersion: apps/v1
