@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - sync: a malformed stored header no longer crashes the service when reencrypting
   - api: a malformed inbox header is rejected and header buffering is bounded
 
+### Changed
+
+- verify: an `error` file event is now written for every failed decrypting copy (for example a storage read error mid-stream), not only for a recovered panic, so the file no longer stays `archived` in `file_event_log` after being routed to the error queue
+
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
