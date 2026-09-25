@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
@@ -480,4 +482,60 @@ func createMessage(triggerType, filePath, userID, messageKey string) *broker.Mes
 	bodyJSON, _ := json.Marshal(body)
 
 	return &broker.Message{Key: messageKey, Body: bodyJSON}
+}
+
+func (ts *TestSuite) TestDecryptRecoversFromMalformedHeader() {
+	// A header declaring a single packet of length 8 (no payload) would make the
+	// crypt4gh reader OOM/panic. decrypt must reject it up front so ingest fails
+	// the file to the error queue instead of crashing and crash-looping on the
+	// redelivered message.
+	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	ts.Require().NoError(err)
+
+	// Assert the validator's own error so removing the validator (leaving only the
+	// recover, which would report a decrypt/panic error) is caught.
+	_, err = ts.ingest.decrypt(io.NopCloser(bytes.NewReader(malformed)))
+	ts.ErrorContains(err, "invalid crypt4gh header")
+}
+
+// unknownTypePacket is a header packet whose type is neither data encryption
+// parameters (0) nor data edit list (1).
+type unknownTypePacket struct{}
+
+func (unknownTypePacket) GetPacketType() headers.HeaderPacketType { return 99 }
+
+func (unknownTypePacket) MarshalBinary() ([]byte, error) {
+	// packet type 99 (little endian) followed by a few payload bytes
+	return []byte{99, 0, 0, 0, 0, 0, 0, 0}, nil
+}
+
+func (ts *TestSuite) TestDecryptRecoversFromUnknownPacketType() {
+	// A well-formed header packet (valid lengths, so it passes
+	// ValidatePacketLengths) encrypted to the archive key, whose decrypted packet
+	// type is unknown. crypt4gh v1.15.0 leaves the packet nil and the reader
+	// panics with a nil pointer dereference; decrypt must recover and return an
+	// error instead of crashing ingest.
+	// This case changes on the crypt4gh bump: the fixed library skips unknown
+	// packet types, so decrypt will then fail later without a panic.
+	_, writerPrivateKey, err := keys.GenerateKeyPair()
+	ts.Require().NoError(err)
+	var magic [8]byte
+	copy(magic[:], headers.MagicNumber)
+	header := headers.Header{
+		MagicNumber:       magic,
+		Version:           1,
+		HeaderPacketCount: 1,
+		HeaderPackets: []headers.HeaderPacket{{
+			WriterPrivateKey:       writerPrivateKey,
+			ReaderPublicKey:        ts.publicKey,
+			HeaderEncryptionMethod: headers.X25519ChaCha20IETFPoly1305,
+			EncryptedHeaderPacket:  unknownTypePacket{},
+		}},
+	}
+	hdr, err := header.MarshalBinary()
+	ts.Require().NoError(err)
+
+	_, err = ts.ingest.decrypt(io.NopCloser(bytes.NewReader(hdr)))
+	ts.ErrorContains(err, "panic while parsing crypt4gh header")
 }

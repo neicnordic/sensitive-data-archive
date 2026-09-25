@@ -6,6 +6,7 @@ import (
 	"crypto/md5"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,6 +25,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/crypto/chacha20poly1305"
 )
 
 var archivePublicKey, archivePrivateKey, archiveKeyError = keys.GenerateKeyPair()
@@ -483,4 +485,47 @@ func (s *mockServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	args := s.Called(r.URL.Path, username, password, basicAuthPresent, expectedBody)
 	w.WriteHeader(args.Int(0))
+}
+
+func TestReEncryptHeaderRecoversFromMalformedHeader(t *testing.T) {
+	// A stored header with a malformed packet makes the crypt4gh parser panic on
+	// v1.15.0. The wrapper must turn that into an error so a single bad header
+	// cannot crash sync.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reEncryptHeader(malformed, archivePrivateKey, [][chacha20poly1305.KeySize]byte{syncPublicKey}); err == nil {
+		t.Error("expected an error for a malformed header, got nil")
+	}
+}
+
+func TestSyncFileRejectsMalformedHeader(t *testing.T) {
+	// A stored header declaring a packet of length 8 must be rejected by
+	// ValidatePacketLengths before it reaches reEncryptHeader.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	mr := &mocks.MockReader{}
+	mdb := &mocks.MockDatabase{}
+	mdb.On("GetInboxPath", "accession_1").Return("/inbox_path/file_1", nil).Once()
+	mdb.On("GetArchivePathAndLocation", "accession_1").Return("archive_path_1", "archive_location", nil).Once()
+	mr.On("GetFileSize", "archive_location", "archive_path_1").Return(int64(1), nil).Once()
+	mr.On("NewFileReader", "archive_location", "archive_path_1").Return([]byte("x"), nil).Once()
+	mdb.On("GetHeaderByAccessionID", "accession_1").Return(malformed, nil).Once()
+
+	v := &sync{
+		archiveC4ghPrivateKey: &archivePrivateKey,
+		syncC4ghPubKey:        &syncPublicKey,
+		db:                    mdb,
+		archiveReader:         mr,
+		syncWriter:            &mocks.MockWriter{},
+	}
+
+	err = v.syncFile(context.Background(), "accession_1")
+	assert.ErrorContains(t, err, "invalid crypt4gh header")
+	mr.AssertExpectations(t)
+	mdb.AssertExpectations(t)
 }

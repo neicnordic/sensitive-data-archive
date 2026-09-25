@@ -294,12 +294,26 @@ func (w *worker) downloadFile(_ context.Context, userID, fileID string, file *os
 		_ = crypt4GHReader.Close()
 	}()
 
-	_, err = io.Copy(file, crypt4GHReader)
+	_, err = copyDecrypted(file, crypt4GHReader)
 	if err != nil {
 		return fmt.Errorf("could not decrypt fileID %s, userID: %s, error: %v", fileID, userID, err)
 	}
 
 	return nil
+}
+
+// copyDecrypted copies the decrypted crypt4gh stream and converts a panic from
+// the reader into an error. A file truncated part way into a data segment makes
+// the crypt4gh reader panic on an out-of-range slice; recovering keeps a single
+// malformed file from crashing the orchestrator worker.
+func copyDecrypted(dst io.Writer, src io.Reader) (n int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic while decrypting file: %v", r)
+		}
+	}()
+
+	return io.Copy(dst, src)
 }
 
 func (w *worker) sendValidatorJobs(ctx context.Context, validationDir string, validationInformation *model.ValidationInformation) error {

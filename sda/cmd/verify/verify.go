@@ -22,6 +22,7 @@ import (
 	verifyconfig "github.com/neicnordic/sensitive-data-archive/cmd/verify/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -135,6 +136,37 @@ func run() error {
 
 		return nil
 	}
+}
+
+// encryptedSegmentSize wraps headers.EncryptedSegmentSize and turns a panic from
+// the crypt4gh header parser into an error. A packet that decrypts with this key
+// but has an unknown packet type makes the parser panic on crypt4gh v1.15.0;
+// recovering here makes that key simply not match instead of crashing verify
+// before the decryption copy.
+func encryptedSegmentSize(header []byte, key [32]byte) (size int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			size = 0
+			err = fmt.Errorf("panic while parsing crypt4gh header: %v", r)
+		}
+	}()
+
+	return headers.EncryptedSegmentSize(header, key)
+}
+
+// copyDecrypted copies the decrypted crypt4gh stream and turns any panic from
+// the reader into an error. A file whose archive object was truncated part way
+// into a data segment makes the crypt4gh reader panic on an out-of-range slice;
+// recovering here fails this one message to the error queue instead of crashing
+// the whole verify service and re-processing the same poison message forever.
+func copyDecrypted(dst io.Writer, src io.Reader) (n int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic while decrypting file: %v", r)
+		}
+	}()
+
+	return io.Copy(dst, src)
 }
 
 func (app *verify) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
@@ -264,9 +296,29 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 		_ = f.Close()
 	}()
 
+	// A header stored with packet lengths that would make the crypt4gh library
+	// allocate gigabytes is rejected before the key loop parses it (a fatal OOM
+	// the recover cannot catch).
+	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
+		slog.Error("invalid crypt4gh header",
+			slog.String("file-id", ingestionVerification.FileID),
+			slog.Any("error", err),
+		)
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"invalid crypt4gh header"}`, string(message.Body)); err != nil {
+			slog.Error("failed to update file event log to error",
+				slog.String("file-id", ingestionVerification.FileID),
+				slog.Any("error", err),
+			)
+
+			return nil, err
+		}
+
+		return []func(){app.errorQueue(message, "invalid crypt4gh header")}, nil
+	}
+
 	var key *[32]byte
 	for _, k := range app.archiveKeyList {
-		size, err := headers.EncryptedSegmentSize(header, *k)
+		size, err := encryptedSegmentSize(header, *k)
 		if (err == nil) && (size != 0) {
 			key = k
 
@@ -317,7 +369,7 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	decryptedChecksum := sha256.New()
 	stream := io.TeeReader(c4ghr, md5hash)
 
-	if file.DecryptedSize, err = io.Copy(decryptedChecksum, stream); err != nil {
+	if file.DecryptedSize, err = copyDecrypted(decryptedChecksum, stream); err != nil {
 		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
 			slog.Warn("context canceled while decrypting file",
 				slog.String("file-id", ingestionVerification.FileID),
@@ -329,6 +381,14 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 			slog.String("file-id", ingestionVerification.FileID),
 			slog.Any("error", err),
 		)
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"failed to copy decrypted data"}`, string(message.Body)); err != nil {
+			slog.Error("failed to update file event log to error",
+				slog.String("file-id", ingestionVerification.FileID),
+				slog.Any("error", err),
+			)
+
+			return nil, err
+		}
 
 		return []func(){app.errorQueue(message, "failed to copy decrypted data")}, nil
 	}

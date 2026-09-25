@@ -2,20 +2,24 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 
 	"github.com/casbin/casbin/v2"
@@ -27,11 +31,15 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
+	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 var (
@@ -689,6 +697,56 @@ func TestDownloadFile(t *testing.T) {
 			assert.Equal(t, tc.wantCode, w.Code)
 		})
 	}
+}
+
+// countingReencryptServer counts ReencryptHeader calls so a test can assert
+// that the handler never forwarded a header to the reencrypt service.
+type countingReencryptServer struct {
+	reencrypt.UnimplementedReencryptServer
+	calls atomic.Int32
+}
+
+func (s *countingReencryptServer) ReencryptHeader(_ context.Context, _ *reencrypt.ReencryptRequest) (*reencrypt.ReencryptResponse, error) {
+	s.calls.Add(1)
+
+	return &reencrypt.ReencryptResponse{Header: []byte("reencrypted")}, nil
+}
+
+func TestDownloadFile_MalformedHeader(t *testing.T) {
+	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
+	// headers.ReadHeader accepts it; ValidatePacketLengths must reject it
+	// before it is sent to the reencrypt service.
+	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
+	require.NoError(t, err)
+
+	lis, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	fake := &countingReencryptServer{}
+	srv := grpc.NewServer()
+	reencrypt.RegisterReencryptServer(srv, fake)
+	go func() { _ = srv.Serve(lis) }()
+	defer srv.Stop()
+
+	conn, err := grpc.NewClient(lis.Addr().String(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	require.NoError(t, err)
+	defer conn.Close()
+
+	mockReader := &mocks.MockReader{}
+	mockReader.On("NewFileReader", mock.Anything, mock.Anything).Return(malformed, nil)
+
+	origReader, origConn := api.inboxReader, api.grpcClient
+	api.inboxReader, api.grpcClient = mockReader, conn
+	defer func() { api.inboxReader, api.grpcClient = origReader, origConn }()
+
+	r, w := newRequest(t, http.MethodGet, "/users/"+userID+"/file/"+fileID, nil, token)
+	r.SetPathValue("username", userID)
+	r.SetPathValue("fileid", fileID)
+	r.Header.Add("C4GH-Public-Key", publicKey)
+	api.rbac(api.downloadFile)(w, r)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+	assert.Contains(t, w.Body.String(), "failed to read file header")
+	assert.Equal(t, int32(0), fake.calls.Load(), "malformed header must not reach the reencrypt service")
 }
 
 func TestListC4ghHashes(t *testing.T) {
