@@ -207,14 +207,14 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	default:
 		span.Warn("file is not verified yet, aborting work")
 
-		return nil, errors.New("file with is not verified yet, aborting work")
+		return nil, errors.New("file is not verified yet, aborting work")
 	}
 
 	return callbacks, err
 }
 
 func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
-	ctx, span := observability.StartSpan(ctx, "backupFile")
+	ctx, span := observability.StartSpan(ctx, "backupFile", attribute.String("file-id", message.Key))
 	defer span.End()
 
 	archiveData, err := app.db.GetArchived(ctx, message.Key)
@@ -285,19 +285,19 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
 		defer cancel()
 		if err := app.backupWriter.RemoveFile(cleanupCtx, backupLocation, archiveData.FilePath); err != nil {
-			log.Errorf("failed to remove file from backup during rollback, file-id: %s, location: %s, reason: %v", message.Key, backupLocation, err)
+			span.Error("failed to remove file from backup during rollback", err, slog.String("location", backupLocation))
 		}
 	}()
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
-		log.Errorf("failed to begin transaction, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("failed to begin transaction", slog.Any("error", err))
 		// requeue message as db error is not expected and should succeed on retries
 		return nil, err
 	}
 	defer func() {
 		if err := tx.Rollback(); err != nil {
-			log.Errorf("failed to rollback transaction, file-id: %s, reason: %v", message.Key, err)
+			span.Error("failed to rollback transaction", err)
 		}
 	}()
 
@@ -326,13 +326,11 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
-	log.Debugf("Backup of file: %s complete", message.Key)
-
 	return nil, nil
 }
 
 func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schema.IngestionAccession, message *brokerv2.Message) ([]func(), error) {
-	ctx, span := observability.StartSpan(ctx, "setAccession", attribute.String("file-accession-id", ingestionAccession.AccessionID))
+	ctx, span := observability.StartSpan(ctx, "setAccession", attribute.String("file-id", message.Key), attribute.String("file-accession-id", ingestionAccession.AccessionID))
 	defer span.End()
 
 	accessionIDExists, err := app.db.CheckAccessionIDExists(ctx, ingestionAccession.AccessionID, message.Key)
@@ -343,7 +341,7 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 	}
 
 	if accessionIDExists == "duplicate" {
-		log.Errorf("accession ID already exists in the system, file-id: %s, accession-id: %s\n", message.Key, ingestionAccession.AccessionID)
+		span.Error("accession ID already exists in the system", nil)
 		// Send the message to an error queue so it can be analyzed.
 		return []func(){app.errorQueue(ctx, message, "Duplicate accession ID")}, nil
 	}
@@ -355,17 +353,13 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 		callbacks, err := app.backupFile(ctx, message)
 		switch {
 		case errors.Is(err, errFileCancelled):
-			log.Warnf("file with file-id: %s was cancelled during backup, aborting work", message.Key)
+			span.Warn("file was cancelled during backup, aborting work")
 
 			return nil, nil
-		case err != nil && callbacks != nil:
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
-			// Send the message to an error queue but don't requeue it
-			return callbacks, nil
 		case err != nil:
-			log.Errorf("failed to backup file, file-id: %s, reason: %v", message.Key, err)
+			span.Error("failed to backup file", err)
 
-			return nil, err
+			return callbacks, err
 		}
 	}
 
@@ -382,26 +376,26 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 	}()
 
 	if accessionIDExists == "same" {
-		log.Infof("file already has an accession ID, marking it as ready, file-id: %s", message.Key)
+		span.Info("file already has an accession ID, marking it as ready")
 	}
 
 	// SetAccessionID is always run, also when the accession ID is already set, because the
 	// update holds the row lock on the file for the rest of the transaction. The status read
 	// below then can not be overtaken by a cancel that commits between the backup and here.
 	if err := tx.SetAccessionID(ctx, ingestionAccession.AccessionID, message.Key); err != nil {
-		log.Errorf("failed to set accessionID for file, file-id: %s, reason: %v", message.Key, err)
+		span.Error("failed to set accessionID for file", err)
 
 		return nil, err
 	}
 
 	status, err := tx.GetFileStatus(ctx, message.Key)
 	if err != nil {
-		log.Errorf("failed to get file status, file-id: %s, reason: %v", message.Key, err)
+		span.Warn("failed to get file status", slog.Any("error", err))
 
 		return nil, err
 	}
 	if status == "disabled" || status == "removed" {
-		log.Warnf("file with file-id: %s was cancelled before it could be marked as ready, aborting work", message.Key)
+		span.Warn("file was cancelled during verification, aborting work")
 
 		return nil, nil
 	}
