@@ -196,7 +196,7 @@ fi
 echo "Importing image into cluster..."
 k3d image import "$IMAGE" -c "$CLUSTER_NAME"
 
-# -- 3. dependencies (postgres, rabbitmq, Ceph RGW as minio) --
+# -- 3. dependencies (postgres, rabbitmq, Ceph RGW as s3) --
 echo "=== Step 3: dependencies ==="
 
 if ! helm status postgres >/dev/null 2>&1; then
@@ -224,26 +224,26 @@ else
     echo "RabbitMQ already installed."
 fi
 
-if ! kubectl get deploy minio >/dev/null 2>&1; then
-    echo "Installing Ceph RGW as service minio..."
+if ! kubectl get deploy s3 >/dev/null 2>&1; then
+    echo "Installing Ceph RGW as service s3..."
     kubectl create configmap ceph-rgw \
         --from-file=.github/integration/scripts/ceph/ceph-rgw.sh \
         --from-file=.github/integration/scripts/ceph/s3.py \
         --dry-run=client -o yaml | kubectl apply -f -
-    kubectl apply -f - <<'MINIO_EOF'
+    kubectl apply -f - <<'CEPH_EOF'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: minio
+  name: s3
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: minio
+      app: s3
   template:
     metadata:
       labels:
-        app: minio
+        app: s3
     spec:
       containers:
       - name: rgw
@@ -272,17 +272,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: minio
+  name: s3
 spec:
   ports:
   - port: 443
     targetPort: 9000
   selector:
-    app: minio
-MINIO_EOF
-    wait_for_pod "app=minio" 180
+    app: s3
+CEPH_EOF
+    wait_for_pod "app=s3" 180
 else
-    echo "Minio already installed."
+    echo "Ceph RGW already installed."
 fi
 
 # -- 4. service account --
@@ -307,7 +307,7 @@ HELM_ARGS=(
     --set global.broker.username=admin
     --set global.broker.password=mqpass
     --set global.archive.storageType=s3
-    --set global.archive.s3Url=http://minio
+    --set global.archive.s3Url=http://s3
     --set global.archive.s3Port=443
     --set global.archive.s3AccessKey=access
     --set global.archive.s3SecretKey=secretkey
@@ -357,7 +357,7 @@ check "config.yaml .service.org-url"   "http://test.org" \
     "$(echo "$CONFIG_YAML" | yq '.service.org-url')"
 check "config.yaml .api.port"          "8080" \
     "$(echo "$CONFIG_YAML" | yq '.api.port')"
-check "config.yaml .storage.archive.s3[0].endpoint" "http://minio:443" \
+check "config.yaml .storage.archive.s3[0].endpoint" "http://s3:443" \
     "$(echo "$CONFIG_YAML" | yq '.storage.archive.s3[0].endpoint')"
 check "config.yaml .db.host"           "postgres-sda-db" \
     "$(echo "$CONFIG_YAML" | yq '.db.host')"
