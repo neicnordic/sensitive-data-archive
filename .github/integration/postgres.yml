@@ -16,6 +16,8 @@ services:
       - "/bin/sh"
       - "/scripts/make_db_credentials.sh"
     depends_on:
+      migrate:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       postgres_tls:
@@ -26,28 +28,36 @@ services:
     volumes:
       - ./scripts:/scripts
 
-  migration_helper:
-    container_name: helper
+  # Migration test: migrate_seed initialises the pgmigrate volume and
+  # restores tests/postgres/sda-schema-0.sql (an sda database at schema
+  # version 0) into it, then exits. Only then does migrate start on the
+  # volume; it finds PG_VERSION, so the entrypoint runs every script in
+  # migratedb.d instead of initdb. 10_sanity_check.sh checks that the
+  # fixture's version 0 row is still there, which fails on a fresh initdb.
+  migrate_seed:
+    container_name: migrate_seed
     command:
-      - /bin/bash
-      - -c
-      - "/usr/bin/tar -zxf /pgdata.tgz -C /pgdata/"
-      - "chmod -R 70:70 /pgdata"
-    image: ubuntu:latest
-    user: 0:70
+      - /sda-schema-0.sql
+    entrypoint:
+      - /scripts/seed_migrate_db.sh
+    environment:
+      - POSTGRES_PASSWORD=rootpasswd
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}-postgres
     volumes:
-      - pgmigrate:/pgdata
-      - ./tests/postgres/pgdata.tgz:/pgdata.tgz
+      - ./scripts:/scripts
+      - ./tests/postgres/sda-schema-0.sql:/sda-schema-0.sql
+      - pgmigrate:/var/lib/postgresql/data
 
   migrate:
     container_name: migrate
     depends_on:
-      migration_helper:
+      migrate_seed:
         condition: service_completed_successfully
     environment:
       - POSTGRES_PASSWORD=rootpasswd
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      # over TCP: the temporary server that runs the migrations only has the socket
+      test: ["CMD-SHELL", "pg_isready -U postgres -h localhost"]
       interval: 5s
       timeout: 20s
       retries: 3
