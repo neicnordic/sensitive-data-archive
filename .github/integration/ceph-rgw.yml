@@ -5,6 +5,9 @@ services:
   ceph:
     image: quay.io/ceph/vstart-cluster:19.2.6
     entrypoint: ["/scripts/ceph-rgw.sh"]
+    # vstart occasionally fails during startup; the script handles a restart
+    # and the healthcheck window is long enough for a second attempt.
+    restart: on-failure
     environment:
       - S3_ACCESS_KEY=access
       - S3_SECRET_KEY=secretKey
