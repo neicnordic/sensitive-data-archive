@@ -485,18 +485,16 @@ func createMessage(triggerType, filePath, userID, messageKey string) *broker.Mes
 }
 
 func (ts *TestSuite) TestDecryptRecoversFromMalformedHeader() {
-	// A header declaring a single packet of length 8 (no payload) would make the
-	// crypt4gh reader OOM/panic. decrypt must reject it up front so ingest fails
-	// the file to the error queue instead of crashing and crash-looping on the
-	// redelivered message.
+	// A header declaring a single packet of length 8 (no payload) made crypt4gh
+	// v1.15.0 panic or over-allocate. decrypt must return an error so ingest
+	// fails the file to the error queue instead of crashing and crash-looping on
+	// the redelivered message.
 	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
 	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
 	ts.Require().NoError(err)
 
-	// Assert the validator's own error so removing the validator (leaving only the
-	// recover, which would report a decrypt/panic error) is caught.
 	_, err = ts.ingest.decrypt(io.NopCloser(bytes.NewReader(malformed)))
-	ts.ErrorContains(err, "invalid crypt4gh header")
+	ts.ErrorContains(err, "too short")
 }
 
 // unknownTypePacket is a header packet whose type is neither data encryption
@@ -511,13 +509,10 @@ func (unknownTypePacket) MarshalBinary() ([]byte, error) {
 }
 
 func (ts *TestSuite) TestDecryptRecoversFromUnknownPacketType() {
-	// A well-formed header packet (valid lengths, so it passes
-	// ValidatePacketLengths) encrypted to the archive key, whose decrypted packet
-	// type is unknown. crypt4gh v1.15.0 leaves the packet nil and the reader
-	// panics with a nil pointer dereference; decrypt must recover and return an
-	// error instead of crashing ingest.
-	// This case changes on the crypt4gh bump: the fixed library skips unknown
-	// packet types, so decrypt will then fail later without a panic.
+	// A well-formed header packet encrypted to the archive key whose decrypted
+	// packet type is unknown. crypt4gh v1.15.0 left the packet nil and panicked
+	// on a nil pointer dereference; v1.15.2 skips it, so the header has no usable
+	// key and decrypt must return an error, never a panic.
 	_, writerPrivateKey, err := keys.GenerateKeyPair()
 	ts.Require().NoError(err)
 	var magic [8]byte
@@ -537,5 +532,5 @@ func (ts *TestSuite) TestDecryptRecoversFromUnknownPacketType() {
 	ts.Require().NoError(err)
 
 	_, err = ts.ingest.decrypt(io.NopCloser(bytes.NewReader(hdr)))
-	ts.ErrorContains(err, "panic while parsing crypt4gh header")
+	ts.ErrorContains(err, "no valid keys found")
 }

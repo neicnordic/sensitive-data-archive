@@ -670,9 +670,9 @@ func (ts *ReEncryptTests) TestReencryptServerRecoversFromHandlerPanic() {
 }
 
 // TestReencryptHeader_MalformedHeader calls the real handler directly with a
-// header declaring a packet of length 8. ValidatePacketLengths must reject it
-// with InvalidArgument before the crypt4gh library parses it (on v1.15.0 the
-// parser panics on this input).
+// header declaring a packet of length 8. crypt4gh (v1.15.2 and later) rejects
+// the length, so the handler must answer with a client error rather than
+// panic, which it did on v1.15.0.
 func (ts *ReEncryptTests) TestReencryptHeader_MalformedHeader() {
 	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
 	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
@@ -681,6 +681,7 @@ func (ts *ReEncryptTests) TestReencryptHeader_MalformedHeader() {
 	s := &server{c4ghPrivateKeyList: ts.PrivateKeyList}
 	res, err := s.ReencryptHeader(context.Background(), &re.ReencryptRequest{Oldheader: malformed, Publickey: ts.UserPubKeyString})
 	assert.Nil(ts.T(), res)
-	assert.Equal(ts.T(), codes.InvalidArgument, status.Code(err))
-	assert.ErrorContains(ts.T(), err, "too short to be valid")
+	require.Error(ts.T(), err)
+	assert.NotEqual(ts.T(), codes.Internal, status.Code(err))
+	assert.ErrorContains(ts.T(), err, "no matching key available")
 }

@@ -22,7 +22,6 @@ import (
 	verifyconfig "github.com/neicnordic/sensitive-data-archive/cmd/verify/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -295,26 +294,6 @@ func (app *verify) handleMessage(ctx context.Context, message *broker.Message) (
 	defer func() {
 		_ = f.Close()
 	}()
-
-	// A header stored with packet lengths that would make the crypt4gh library
-	// allocate gigabytes is rejected before the key loop parses it (a fatal OOM
-	// the recover cannot catch).
-	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
-		slog.Error("invalid crypt4gh header",
-			slog.String("file-id", ingestionVerification.FileID),
-			slog.Any("error", err),
-		)
-		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"invalid crypt4gh header"}`, string(message.Body)); err != nil {
-			slog.Error("failed to update file event log to error",
-				slog.String("file-id", ingestionVerification.FileID),
-				slog.Any("error", err),
-			)
-
-			return nil, err
-		}
-
-		return []func(){app.errorQueue(message, "invalid crypt4gh header")}, nil
-	}
 
 	var key *[32]byte
 	for _, k := range app.archiveKeyList {

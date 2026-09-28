@@ -16,7 +16,6 @@ import (
 
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
-	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	re "github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	log "github.com/sirupsen/logrus"
@@ -63,11 +62,6 @@ func (s *server) ReencryptHeader(_ context.Context, in *re.ReencryptRequest) (*r
 
 	if h := in.GetOldheader(); h == nil {
 		return nil, status.Error(400, "no header received")
-	}
-	// Reject a header whose packet lengths would make the crypt4gh library
-	// allocate gigabytes before it is parsed below.
-	if err := c4ghheader.ValidatePacketLengths(in.GetOldheader()); err != nil {
-		return nil, status.Error(codes.InvalidArgument, err.Error())
 	}
 
 	extraHeaderPackets := make([]headers.EncryptedHeaderPacket, 0)

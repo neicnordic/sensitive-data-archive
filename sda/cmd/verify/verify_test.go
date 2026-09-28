@@ -615,10 +615,9 @@ func TestEncryptedSegmentSizeRecoversFromMalformedHeader(t *testing.T) {
 }
 
 // malformedHeaderCase feeds verify a stored header whose single packet declares
-// a length below the minimum. The header validator must reject it before the key
-// loop, with its own error reason, so the file goes to the error queue. This
-// pins the validator wiring: without it the header would reach the recover in the
-// key loop and be reported as "no matching key" instead.
+// a length below the minimum. crypt4gh rejects it for every archive key, so the
+// file must end on the "no matching key" path with an error event and an ack,
+// without a panic.
 var malformedHeaderCase = testCase{
 	name: "malformed_header",
 	sourceMessage: schema.IngestionVerification{
@@ -646,8 +645,7 @@ var malformedHeaderCase = testCase{
 		mockDatabase.On("GetArchiveLocation", "malformed").Return("archive_location", nil).Once()
 		mockReader.On("GetFileSize", "archive_location", "/malformed").Return(int64(1024), nil).Once()
 		mockReader.On("NewFileReader", "archive_location", "/malformed").Return([]byte{}, nil).Once()
-		mockDatabase.On("UpdateFileEventLog", "malformed", "error", "verify", `{"error":"invalid crypt4gh header"}`, mock.Anything).Return(nil).Once()
-		mockBroker.On("Publish", "error", mock.Anything).Return(nil).Once()
+		mockDatabase.On("UpdateFileEventLog", "malformed", "error", "verify", `{"error":"no matching c4gh key found for file"}`, mock.Anything).Return(nil).Once()
 
 		return mockReader, mockDatabase, mockBroker
 	},
