@@ -501,8 +501,8 @@ func TestReEncryptHeaderRecoversFromMalformedHeader(t *testing.T) {
 }
 
 func TestSyncFileRejectsMalformedHeader(t *testing.T) {
-	// A stored header declaring a packet of length 8 must be rejected by
-	// ValidatePacketLengths before it reaches reEncryptHeader.
+	// A stored header declaring a packet of length 8 must fail syncFile with an
+	// error (crypt4gh rejects the length) rather than a panic.
 	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
 	if err != nil {
 		t.Fatal(err)
@@ -525,7 +525,7 @@ func TestSyncFileRejectsMalformedHeader(t *testing.T) {
 	}
 
 	err = v.syncFile(context.Background(), "accession_1")
-	assert.ErrorContains(t, err, "invalid crypt4gh header")
+	assert.ErrorContains(t, err, "too short")
 	mr.AssertExpectations(t)
 	mdb.AssertExpectations(t)
 }

@@ -714,8 +714,8 @@ func (s *countingReencryptServer) ReencryptHeader(_ context.Context, _ *reencryp
 
 func TestDownloadFile_MalformedHeader(t *testing.T) {
 	// magic + version 1 + packet count 1 + packet{length 8, method 0}.
-	// headers.ReadHeader accepts it; ValidatePacketLengths must reject it
-	// before it is sent to the reencrypt service.
+	// headers.ReadHeader must reject it before it is sent to the reencrypt
+	// service.
 	malformed, err := hex.DecodeString("6372797074346768" + "01000000" + "01000000" + "08000000" + "00000000")
 	require.NoError(t, err)
 

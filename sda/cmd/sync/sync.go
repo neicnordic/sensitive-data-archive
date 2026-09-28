@@ -21,7 +21,6 @@ import (
 	syncconf "github.com/neicnordic/sensitive-data-archive/cmd/sync/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
@@ -271,9 +270,6 @@ func (app *sync) syncFile(ctx context.Context, accessionID string) error {
 	header, err := app.db.GetHeaderByAccessionID(ctx, accessionID)
 	if err != nil {
 		return fmt.Errorf("failed to get header from db, reason: %w", err)
-	}
-	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
-		return fmt.Errorf("invalid crypt4gh header, reason: %w", err)
 	}
 
 	newHeader, err := reEncryptHeader(header, *app.archiveC4ghPrivateKey, [][chacha20poly1305.KeySize]byte{*app.syncC4ghPubKey})

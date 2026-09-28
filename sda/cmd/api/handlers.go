@@ -24,7 +24,6 @@ import (
 	"github.com/neicnordic/crypt4gh/model/headers"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/c4ghheader"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
@@ -655,13 +654,6 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// #nosec G706 -- slog safely escapes structured attributes natively
 		slog.Error("failed to read file header", "file_id", fileID, "err", err)
-		writeJSON(w, http.StatusInternalServerError, "failed to read file header")
-
-		return
-	}
-	if err := c4ghheader.ValidatePacketLengths(header); err != nil {
-		// #nosec G706 -- slog safely escapes structured attributes natively
-		slog.Error("invalid crypt4gh header", "file_id", fileID, "err", err)
 		writeJSON(w, http.StatusInternalServerError, "failed to read file header")
 
 		return
