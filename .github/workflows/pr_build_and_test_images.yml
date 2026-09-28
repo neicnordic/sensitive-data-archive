@@ -248,6 +248,16 @@ jobs:
             bash -x "$runscript";
           done
 
+      - name: Show container state and logs
+        if: failure()
+        run: |
+          docker ps -a
+          for c in $(docker ps -aq); do
+            echo "::group::$(docker inspect -f '{{.Name}} ({{.State.Status}}, exit {{.State.ExitCode}})' "$c")"
+            docker logs --tail 200 "$c" 2>&1
+            echo "::endgroup::"
+          done
+
   sda-download-v2_integration_test:
     needs:
       - build_images
