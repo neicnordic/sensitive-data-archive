@@ -560,12 +560,13 @@ func TestDownload_Fail_OpenFile(t *testing.T) {
 
 	tempDir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err = os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   archive:
     posix:
     - path: %s
-`, tempDir)), 0600); err != nil {
+`, tempDir)), 0600)
+	if err != nil {
 		assert.FailNow(t, err.Error())
 	}
 
@@ -807,12 +808,13 @@ func TestDownload_FileInMultipleDatasets(t *testing.T) {
 
 	tempDir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err = os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   archive:
     posix:
     - path: %s
-`, tempDir)), 0600); err != nil {
+`, tempDir)), 0600)
+	if err != nil {
 		assert.FailNow(t, err.Error())
 	}
 
@@ -1032,12 +1034,13 @@ func TestDownload_Whole_Range_Encrypted(t *testing.T) {
 
 	tempDir := t.TempDir()
 
-	if err := os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
+	err = os.WriteFile(filepath.Join(tempDir, "config.yaml"), []byte(fmt.Sprintf(`
 storage:
   archive:
     posix:
     - path: %s
-`, tempDir)), 0600); err != nil {
+`, tempDir)), 0600)
+	if err != nil {
 		assert.FailNow(t, err.Error())
 	}
 
