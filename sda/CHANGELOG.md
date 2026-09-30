@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.2] - 2026-09-30
+
 ### Fixed
 
 - bump crypt4gh to v1.15.2, which returns an error instead of panicking or over-allocating on a malformed header packet or a truncated data segment, and recover from crypt4gh panics in every service that parses user data, so a crafted or truncated file can no longer crash, crash-loop or OOM a service:
