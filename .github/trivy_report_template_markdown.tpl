@@ -1,9 +1,9 @@
 {{- if . }}
+{{- $found := false }}
 {{- range . }}
+{{- if .Vulnerabilities }}
+{{- $found = true }}
 ## Target `{{ escapeXML .Target }}`
-{{- if (eq (len .Vulnerabilities) 0) }}
-### No Vulnerabilities found
-{{- else }}
 ### Vulnerabilities ({{ len .Vulnerabilities }})
 | Package | ID | Severity | Installed Version | Fixed Version | Title |
 | -------- | ---- | -------- | ---------------- | ------------ | ---- |
@@ -12,6 +12,9 @@
     {{- end }}
 
 {{- end }}
+{{- end }}
+{{- if not $found }}
+### No Vulnerabilities found
 {{- end }}
 {{- else }}
 ## Trivy Returned Empty Report

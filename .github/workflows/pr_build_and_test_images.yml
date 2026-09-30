@@ -126,12 +126,23 @@ jobs:
           format: template
           template: '@.github/trivy_report_template_markdown.tpl'
           output: trivy-results.md
+          # Same filter as the sarif scan above, so the PR comment only lists
+          # what the Security tab would flag; medium and unfixable findings
+          # otherwise repeat once per statically linked binary.
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
 
       - name: Generate PR comment
         if: steps.changes.outputs.changed == 'true'
         run: |
-          echo "## 🔍 Trivy Scan - ${{ matrix.name }} 🔍" > trivy-comment.md
-          cat trivy-results.md >> trivy-comment.md
+          {
+            echo "## 🔍 Trivy Scan - ${{ matrix.name }} 🔍"
+            echo "<details><summary>Critical and high findings with a fix available</summary>"
+            echo
+            cat trivy-results.md
+            echo
+            echo "</details>"
+          } > trivy-comment.md
 
       - name: Comment PR
         if: steps.changes.outputs.changed == 'true'
