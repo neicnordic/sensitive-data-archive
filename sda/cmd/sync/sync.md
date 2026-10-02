@@ -132,4 +132,4 @@ Sync operates by reading file data from the "archive" backend and replicating it
 
 ### Observability
 The sync service initializes the observability package, for configuration options and additional details see
-[Observability README.md](../../internal/observability/README.md).
+[Observability README.md](../../pkg/observability/README.md).

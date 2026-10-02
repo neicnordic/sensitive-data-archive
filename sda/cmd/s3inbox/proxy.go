@@ -23,9 +23,9 @@ import (
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	observability2 "github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -109,7 +109,7 @@ func newProxy(s3conf s3InboxConfig, s3Client *s3.Client, auth userauth.Authentic
 }
 
 func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "handleRequest")
+	ctx, span := observability2.StartSpan(r.Context(), "handleRequest")
 	defer span.End()
 
 	token, err := p.auth.Authenticate(r)
@@ -147,7 +147,7 @@ func (p *proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // Report 500 to the user, log the original error
-func (p *proxy) internalServerError(span observability.Span, w http.ResponseWriter, tokenSubject, httpMethod, path, query string, err error) {
+func (p *proxy) internalServerError(span observability2.Span, w http.ResponseWriter, tokenSubject, httpMethod, path, query string, err error) {
 	span.Error("internal error",
 		err,
 		slog.String("user", tokenSubject),
@@ -218,7 +218,7 @@ func (p *proxy) prepareForwardPathAndQuery(s3RequestType S3RequestType, originPa
 
 // forwardRequest forwards the request to the s3 backend after making request user specific, then forwards response to client
 func (p *proxy) forwardRequest(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
-	ctx, span := observability.StartSpan(ctx, "forwardRequest",
+	ctx, span := observability2.StartSpan(ctx, "forwardRequest",
 		attribute.String("s3RequestType", string(s3RequestType)),
 		attribute.String("user", token.Subject()),
 	)
@@ -248,7 +248,7 @@ func (p *proxy) forwardRequest(ctx context.Context, s3RequestType S3RequestType,
 }
 func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
-	ctx, span := observability.StartSpan(ctx, "handleUpload", attribute.String("user", username))
+	ctx, span := observability2.StartSpan(ctx, "handleUpload", attribute.String("user", username))
 	defer span.End()
 
 	var err error
@@ -626,7 +626,7 @@ func (p *proxy) checkFileExists(ctx context.Context, s3FilePath string) (bool, e
 // that the object has actually been removed from the inbox storage backend.
 func (p *proxy) handleRemove(ctx context.Context, s3RequestType S3RequestType, w http.ResponseWriter, r *http.Request, token jwt.Token) {
 	username := token.Subject()
-	ctx, span := observability.StartSpan(ctx, "handleRemove", attribute.String("user", username))
+	ctx, span := observability2.StartSpan(ctx, "handleRemove", attribute.String("user", username))
 	defer span.End()
 
 	var err error
@@ -738,7 +738,7 @@ func formatUploadFilePath(filePath string) (string, error) {
 }
 
 // Write the error and its status code to the response
-func reportErrorToClient(span observability.Span, errorCode int, message string, w http.ResponseWriter) {
+func reportErrorToClient(span observability2.Span, errorCode int, message string, w http.ResponseWriter) {
 	errorResponse := ErrorResponse{
 		Code:    http.StatusText(errorCode),
 		Message: message,
