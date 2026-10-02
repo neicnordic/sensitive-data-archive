@@ -150,8 +150,9 @@ WHERE f.stable_id = $1 AND c.source = $2`,
 ORDER BY COALESCE(fd.download_path, f.submission_file_path), f.stable_id
 LIMIT $4`,
 
-	// getDatasetFilesPageByPath returns files with an exact path. Paths are not unique
-	// within a dataset, so it pages on stable_id. $3='' means first page.
+	// getDatasetFilesPageByPath returns files with an exact path. Paths should be unique
+	// within a dataset, but the schema does not enforce it yet (#2654), so it pages on
+	// stable_id to always terminate. $3='' means first page.
 	getDatasetFilesPageByPathQuery: paginatedFileBase + `
   AND COALESCE(fd.download_path, f.submission_file_path) = $2
   AND ($3 = '' OR f.stable_id > $3)
