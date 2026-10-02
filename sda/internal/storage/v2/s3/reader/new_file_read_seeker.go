@@ -12,7 +12,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	observability2 "github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -39,12 +39,12 @@ type s3SeekableReader struct {
 	chunkSize             uint64
 	ctx                   context.Context
 	cancel                context.CancelFunc
-	span                  observability.Span
+	span                  observability2.Span
 }
 
 func (reader *Reader) NewFileReadSeeker(ctx context.Context, location, filePath string) (io.ReadSeekCloser, error) {
 	ctx, cancel := context.WithCancel(ctx)
-	ctx, span := observability.StartSpan(ctx, "storage.s3.reader.NewFileReadSeeker",
+	ctx, span := observability2.StartSpan(ctx, "storage.s3.reader.NewFileReadSeeker",
 		attribute.String("location", location),
 		attribute.String("filePath", filePath),
 	)

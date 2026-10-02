@@ -77,7 +77,7 @@ which is the behaviour of earlier releases. Two further things it does not do:
 
 ## Observability
 The auth service initializes the observability package, for configuration options and additional details see
-[Observability README.md](../../internal/observability/README.md).
+[Observability README.md](../../pkg/observability/README.md).
 
 ## Running with Cross-Origin Resource Sharing (CORS)
 
