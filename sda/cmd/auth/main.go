@@ -22,7 +22,7 @@ import (
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"

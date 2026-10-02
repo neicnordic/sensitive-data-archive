@@ -9,7 +9,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 )
 
 // hasDatasetAccess checks if the user has access to a specific dataset.

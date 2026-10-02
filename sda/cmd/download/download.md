@@ -948,7 +948,7 @@ Production safety guards enforce:
 
 ### Observability
 The download service initializes the observability package, for configuration options and additional details see
-[Observability README.md](../../internal/observability/README.md).
+[Observability README.md](../../pkg/observability/README.md).
 
 ## Testing
 

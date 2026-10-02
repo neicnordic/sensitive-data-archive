@@ -9,8 +9,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/smithy-go"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 )
 

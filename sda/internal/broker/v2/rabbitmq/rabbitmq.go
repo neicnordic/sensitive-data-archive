@@ -11,7 +11,7 @@ import (
 	"time"
 
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"

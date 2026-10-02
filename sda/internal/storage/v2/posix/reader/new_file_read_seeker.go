@@ -5,7 +5,7 @@ import (
 	"errors"
 	"io"
 
-	"github.com/neicnordic/sensitive-data-archive/internal/observability"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	"go.opentelemetry.io/otel/attribute"
 )
 

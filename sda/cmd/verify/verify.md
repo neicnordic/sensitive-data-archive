@@ -130,4 +130,4 @@ For more details on available configuration see [storage/v2 README.md](../../int
 
 ### Observability
 The verify service initializes the observability package, for configuration options and additional details see
-[Observability README.md](../../internal/observability/README.md).
+[Observability README.md](../../pkg/observability/README.md).
