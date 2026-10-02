@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -185,22 +186,26 @@ func newReencryptServer(opts ...grpc.ServerOption) *grpc.Server {
 }
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+func run() error {
 	conf, err := config.NewConfig("reencrypt")
 	if err != nil {
-		log.Fatalf("configuration loading failed, reason: %v", err)
+		return fmt.Errorf("configuration loading failed, reason: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	if err := configv2.Load(); err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		return fmt.Errorf("failed to load config: %v", err)
 	}
 
 	shutdown, err := observability.SetupOTelSDK(ctx, "sda-reencrypt")
 	if err != nil {
-		log.Errorf("failed to setup OTel SDK: %v", err)
-		os.Exit(1)
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
 	}
 	defer func() {
 		if err := shutdown(ctx); err != nil {
@@ -210,21 +215,6 @@ func main() {
 
 	ctx, startupSpan := observability.StartSpan(ctx, "start up")
 	defer startupSpan.End()
-
-	sigc := make(chan os.Signal, 5)
-	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
-	defer func() {
-		if err := recover(); err != nil {
-			log.Fatal("Could not recover, exiting")
-		}
-	}()
-
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port))
-	if err != nil {
-		log.Errorf("failed to listen: %v", err)
-		sigc <- syscall.SIGINT
-		panic(err)
-	}
 
 	var (
 		opts       []grpc.ServerOption
@@ -236,22 +226,17 @@ func main() {
 		case conf.ReEncrypt.CACert != "":
 			caFile, err := os.ReadFile(conf.ReEncrypt.CACert)
 			if err != nil {
-				log.Errorf("Failed to read CA certificate: %v", err)
-				sigc <- syscall.SIGINT
-				panic(err)
+				return fmt.Errorf("failed to read CA certificate: %v", err)
 			}
 
 			caCert = x509.NewCertPool()
 			if !caCert.AppendCertsFromPEM(caFile) {
-				sigc <- syscall.SIGINT
-				panic("Failed to append ca certificate")
+				return errors.New("failed to append ca certificate")
 			}
 
 			serverCert, err = tls.LoadX509KeyPair(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
-				log.Errorf("Failed to parse certificates: %v", err)
-				sigc <- syscall.SIGINT
-				panic(err)
+				return fmt.Errorf("failed to parse certificates: %v", err)
 			}
 
 			creds := credentials.NewTLS(
@@ -266,9 +251,7 @@ func main() {
 		default:
 			creds, err := credentials.NewServerTLSFromFile(conf.ReEncrypt.ServerCert, conf.ReEncrypt.ServerKey)
 			if err != nil {
-				log.Errorf("Failed to generate tlsConfig: %v", err)
-				sigc <- syscall.SIGINT
-				panic(err)
+				return fmt.Errorf("failed to generate tlsConfig: %v", err)
 			}
 			opts = []grpc.ServerOption{grpc.Creds(creds)}
 		}
@@ -292,25 +275,50 @@ func main() {
 
 	healthServerListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port+1))
 	if err != nil {
-		log.Errorf("failed to listen: %v", err)
-		sigc <- syscall.SIGINT
-		panic(err)
+		return fmt.Errorf("health server failed to listen: %v", err)
 	}
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
 	go func() {
 		log.Debugf("health server listening at %v", healthServerListener.Addr())
 		if err := p.Serve(healthServerListener); err != nil {
-			log.Errorf("failed to serve: %v", err)
+			slog.Error("health server failed to serve", slog.Any("error", err))
 			sigc <- syscall.SIGINT
-			panic(err)
+		}
+	}()
+	defer func() {
+		if err := healthServerListener.Close(); err != nil {
+			slog.Error("health server failed to close", slog.Any("error", err))
+		}
+	}()
+
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", conf.ReEncrypt.Host, conf.ReEncrypt.Port))
+	if err != nil {
+		return fmt.Errorf("failed to listen: %v", err)
+	}
+	defer func() {
+		if err := lis.Close(); err != nil {
+			slog.Error("reencrypt listener failed to close", slog.Any("error", err))
 		}
 	}()
 
 	// Start reencrypt server
-	log.Printf("server listening at %v", lis.Addr())
+	log.Printf("reencrypt server listening at %v", lis.Addr())
+	go func() {
+		if err := s.Serve(lis); err != nil {
+			log.Errorf("reencrypt server failed to serve: %v", err)
+			sigc <- syscall.SIGINT
+		}
+	}()
+
+	defer s.GracefulStop()
+
 	startupSpan.End()
-	if err := s.Serve(lis); err != nil {
-		log.Errorf("failed to serve: %v", err)
-		sigc <- syscall.SIGINT
-		panic(err)
-	}
+	sig := <-sigc
+	slog.Info("received signal, shutting down gracefully", "signal", sig)
+	cancel()
+
+	return nil
 }
