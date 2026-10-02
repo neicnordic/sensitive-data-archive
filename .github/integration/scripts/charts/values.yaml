@@ -46,6 +46,7 @@ global:
     port: 9000
     bucket: "inbox"
     readyPath: ""
+    region: "default"
   auth:
     jwtSecret: jwk
     jwtAlg: ES256
