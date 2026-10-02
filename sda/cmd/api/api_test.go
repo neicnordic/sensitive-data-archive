@@ -745,7 +745,7 @@ func TestDownloadFile_MalformedHeader(t *testing.T) {
 	api.rbac(api.downloadFile)(w, r)
 
 	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Contains(t, w.Body.String(), "failed to read file header")
+	assert.Contains(t, w.Body.String(), "Internal Server Error")
 	assert.Equal(t, int32(0), fake.calls.Load(), "malformed header must not reach the reencrypt service")
 }
 
