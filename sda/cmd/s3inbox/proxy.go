@@ -364,10 +364,7 @@ func (p *proxy) handleUpload(ctx context.Context, s3RequestType S3RequestType, w
 		}
 
 		pubCtx, pubCancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-		if err := p.broker.Publish(pubCtx, p.routingKey, broker.Message{
-			Key:  fileID,
-			Body: jsonMessage,
-		}); err != nil {
+		if err := p.broker.Publish(pubCtx, p.routingKey, broker.Message{Key: fileID, Body: jsonMessage}); err != nil {
 			p.internalServerError(span, w, token.Subject(), r.Method, r.URL.Path, r.URL.RawQuery, fmt.Errorf("broker error: %v", err))
 			pubCancel()
 
