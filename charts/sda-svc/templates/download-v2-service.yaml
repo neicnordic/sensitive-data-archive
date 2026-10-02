@@ -12,6 +12,12 @@ spec:
     port: 80
     targetPort: download-v2
     protocol: TCP
+  {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+  - name: prometheus
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.fullname" . }}-download-v2
 {{- end }}

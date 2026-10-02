@@ -12,6 +12,12 @@ spec:
     port: {{ ternary 443 80 ( .Values.global.tls.enabled ) }}
     targetPort: auth
     protocol: TCP
+  {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+  - name: prometheus
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.fullname" . }}-auth
 {{- end }}

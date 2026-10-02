@@ -254,7 +254,7 @@ func (ts *TestSuite) TestHandleMessage_other() {
 
 	message := createMessage(filePath, userName, accession, fileID)
 	_, err := ts.app.handleMessage(context.Background(), message)
-	assert.Equal(ts.T(), fmt.Sprintf("file with file-id: %s is not verified yet, aborting work", fileID), err.Error())
+	assert.Equal(ts.T(), "file is not verified yet, aborting work", err.Error())
 }
 
 func (ts *TestSuite) TestHandleMessage_missing() {

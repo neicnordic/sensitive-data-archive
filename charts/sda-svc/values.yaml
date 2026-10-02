@@ -14,6 +14,21 @@ global:
   tlsPath: "tls"
   jwtPath: "jwt"
 
+  # Observability related environment variable configuration
+  # See https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables
+  observability: {}
+    # If trace exporting is desired, suggested method is OTEL_TRACES_EXPORTER: "otlp"
+    # Then OTEL_EXPORTER_OTLP_ENDPOINT should also most likely be configured which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo:4318.
+    # See https://opentelemetry.io/docs/specs/otel/protocol/exporter/ for additional OTLP Exporter configurations.
+    # OTEL_TRACES_EXPORTER: "none"
+    # OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+    #
+    # If metrics exporting is desired, suggested method is OTEL_METRICS_EXPORTER: "prometheus"
+    # OTEL_METRICS_EXPORTER: "prometheus"
+    # With the "prometheus" exporter the applications which support observability will host a Prometheus endpoint (/metrics) on
+    # host: "0.0.0.0" (configurable by OTEL_EXPORTER_PROMETHEUS_HOST), and port: 9464 (configurable by OTEL_EXPORTER_PROMETHEUS_PORT)
+    # Set additional opentelemetry environment variables under this scope as desired, these will be propagated to the applications.
+
 # Name of an injected config file, located in the secretsPath
 # If the file is located in a subpath it can be set using the confFilePath
 # If no conf file is specified DB and MQ connections will be configured via ENVs

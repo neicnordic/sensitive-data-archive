@@ -10,9 +10,16 @@ import (
 	"strings"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func (reader *Reader) FindFile(_ context.Context, filePath string) (string, error) {
+func (reader *Reader) FindFile(ctx context.Context, filePath string) (string, error) {
+	_, span := observability.StartSpan(ctx, "storage.posix.reader.FindFile",
+		attribute.String("filePath", filePath),
+	)
+	defer span.End()
+
 	for _, endpointConf := range reader.configuredEndpoints {
 		basePath, err := filepath.Abs(endpointConf.Path)
 		if err != nil {

@@ -15,12 +15,12 @@ spec:
   revisionHistoryLimit: {{ default "3" .Values.global.revisionHistory }}
   selector:
     matchLabels:
-      app: {{ template "sda.name" . }}-mapper
+      app: {{ template "sda.fullname" . }}-mapper
       release: {{ .Release.Name }}
   template:
     metadata:
       labels:
-        app: {{ template "sda.name" . }}-mapper
+        app: {{ template "sda.fullname" . }}-mapper
         role: mapper
         release: {{ .Release.Name }}
       annotations:
@@ -58,6 +58,16 @@ spec:
           value: {{ include "confFile" . }}
         - name: CONFIG_FILE
           value: {{ include "confFile" . }}
+        {{- range $name, $value := .Values.global.observability }}
+        - name: {{ $name }}
+          value: {{ $value | quote }}
+        {{- end }}
+        {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+        ports:
+          - name: prometheus
+            containerPort: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+            protocol: TCP
+        {{- end }}
         resources:
 {{ toYaml .Values.mapper.resources | trim | indent 10 }}
         volumeMounts:

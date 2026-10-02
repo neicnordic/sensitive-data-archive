@@ -77,6 +77,16 @@ spec:
             value: {{ include "confFile" . }}
           - name: CONFIG_FILE
             value: {{ include "confFile" . }}
+          {{- range $name, $value := .Values.global.observability }}
+          - name: {{ $name }}
+            value: {{ $value | quote }}
+          {{- end }}
+        {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+        ports:
+          - name: prometheus
+            containerPort: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+            protocol: TCP
+        {{- end }}
         resources:
 {{ toYaml .Values.sync.resources | trim | indent 10 }}
         volumeMounts:

@@ -13,6 +13,12 @@ spec:
   - name: healthcheck
     port: {{add ( ternary 50443 50051 ( .Values.global.tls.enabled ) ) 1 }}
     targetPort: grpchealth
+  {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+  - name: prometheus
+    port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+    targetPort: prometheus
+    protocol: TCP
+  {{- end }}
   selector:
     app: {{ template "sda.name" . }}-reencrypt
 {{- end }}
