@@ -48,7 +48,7 @@ s3inbox:
   access_key: "access"
   secret_key: "secretKey"
   bucket: "inbox"
-  region: "us-east-1"
+  region: "default"
 
 location_broker.cache_ttl: 0
 
