@@ -35,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
+
 - ingest, finalize: Large files no longer exceed `idle_in_transaction_session_timeout` and loop re-streaming; no storage I/O happens while a database transaction is open
   - ingest: register a file that is not known in the db (but present in the inbox) as "uploaded" in its own transaction before streaming, so a requeued message is retried
   - ingest: read the archived file size and write the "submitted" file event after the archive write
@@ -45,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.0.0] - 2026-09-21
 
 ### Added
+
 - s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
 - api: add new API /dataset/{dataset_id} for getting state of a dataset
 - api: add new endpoint /file/cancel for cancelling an ingested file.
@@ -184,4 +186,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Unhandled error linter issues in sda/download
 
 ## [3.1.71] - 2026-05-25
+
 - Started keeping a changelog after this version.
