@@ -199,7 +199,7 @@ paths:
       description: |
         Returns metadata for files in the dataset. Supports cursor-based pagination
         and two optional filters (mutually exclusive — providing both returns 400):
-        - filePath: exact path equality (returns 0 or 1 results)
+        - filePath: exact path equality (normally 0 or 1 results)
         - pathPrefix: recursive prefix match (returns all files under the prefix)
       parameters:
         - $ref: "#/components/parameters/DatasetIdPath"
@@ -209,10 +209,12 @@ paths:
           schema:
             type: string
           description: |
-            Exact dataset-relative file path. When provided, only the file
-            with this exact path is returned (at most one result). The response
-            includes `downloadUrl` so clients can resolve path → download in two
-            calls without extra logic.
+            Exact dataset-relative file path. When provided, only files with
+            this exact path are returned. That is normally at most one file; if
+            several files in the dataset share the path, all of them are returned
+            and paginated like any other listing. The response includes
+            `downloadUrl` so clients can resolve path → download in two calls
+            without extra logic.
 
             **Normalization rules:**
             - Case-sensitive (POSIX path semantics).
@@ -240,8 +242,8 @@ paths:
       responses:
         "200":
           description: |
-            Successful operation. When filePath is provided, the files array contains
-            0 or 1 elements (200 with empty array when no file matches, not 404).
+            Successful operation. When filePath is provided, the files array normally
+            contains 0 or 1 elements (200 with empty array when no file matches, not 404).
           headers:
             Cache-Control:
               $ref: "#/components/headers/CacheControlPrivate"

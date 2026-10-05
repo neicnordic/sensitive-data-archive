@@ -76,7 +76,7 @@ func run() error {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
 	}
 
-	if err = checkS3Bucket(ctx, s3Client, s3inboxconf.S3InboxBucket()); err != nil {
+	if err = checkS3Bucket(ctx, s3Client, s3inboxconf.S3InboxBucket(), s3inboxconf.S3InboxRegion()); err != nil {
 		return fmt.Errorf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
@@ -164,21 +164,29 @@ func run() error {
 	}
 }
 
-func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) error {
-	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
-	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) {
-			var bae *types.BucketAlreadyExists
-			var baoby *types.BucketAlreadyOwnedByYou
-			if errors.As(err, &bae) || errors.As(err, &baoby) {
+func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket, region string) error {
+	_, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &bucket})
+	if err != nil { //nolint nestif
+		var apiError smithy.APIError
+		if errors.As(err, &apiError) {
+			switch apiError.(type) {
+			case *types.NotFound:
+				_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket,
+					CreateBucketConfiguration: &types.CreateBucketConfiguration{
+						LocationConstraint: types.BucketLocationConstraint(region),
+					},
+				})
+				if err != nil {
+					return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
+				}
+			case *types.BucketAlreadyExists:
 				return nil
+			case *types.BucketAlreadyOwnedByYou:
+				return nil
+			default:
+				return fmt.Errorf("either you don't have access to bucket %v or another error occurred: %v", &bucket, err)
 			}
-
-			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
 		}
-
-		return fmt.Errorf("verifying bucket failed, check S3 configuration: %v", err)
 	}
 
 	return nil
