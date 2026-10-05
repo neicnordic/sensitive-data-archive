@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
 
+### Fixed
+
+- download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
+- s3inbox: Check if the bucket exists before trying to create it.
+
 ## [4.0.2] - 2026-09-30
 
 ### Fixed
@@ -30,6 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.0.1] - 2026-09-24
 
 ### Fixed
+
 - ingest, finalize: Large files no longer exceed `idle_in_transaction_session_timeout` and loop re-streaming; no storage I/O happens while a database transaction is open
   - ingest: register a file that is not known in the db (but present in the inbox) as "uploaded" in its own transaction before streaming, so a requeued message is retried
   - ingest: read the archived file size and write the "submitted" file event after the archive write
@@ -40,6 +46,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [4.0.0] - 2026-09-21
 
 ### Added
+
 - s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
 - api: add new API /dataset/{dataset_id} for getting state of a dataset
 - api: add new endpoint /file/cancel for cancelling an ingested file.
@@ -179,4 +186,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Unhandled error linter issues in sda/download
 
 ## [3.1.71] - 2026-05-25
+
 - Started keeping a changelog after this version.

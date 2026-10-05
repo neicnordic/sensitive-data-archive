@@ -10,6 +10,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.3.15
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.107.3
 	github.com/aws/smithy-go v1.27.8
+	github.com/awsdocs/aws-doc-sdk-examples/gov2/s3 v0.0.0-20261001152457-46ec94678534
+	github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools v0.0.0-20240907001412-a9375541143b
 	github.com/c2h5oh/datasize v0.0.0-20231215233829-aa82cc1e6500
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/coreos/go-oidc/v3 v3.20.0

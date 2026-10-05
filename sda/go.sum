@@ -65,6 +65,10 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.45.7 h1:yU/9y2r7s9kSUPbHXbpQTa4LA8kt
 github.com/aws/aws-sdk-go-v2/service/sts v1.45.7/go.mod h1:0lQTDEBArMevQXpxu443LVGjKxxEeSsSnrw9n8YiTMg=
 github.com/aws/smithy-go v1.27.8 h1:FR0dxZfIlV7Z8eh2iHfIofdunw382XsDV3Mxt9nUvRY=
 github.com/aws/smithy-go v1.27.8/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
+github.com/awsdocs/aws-doc-sdk-examples/gov2/s3 v0.0.0-20261001152457-46ec94678534 h1:fZq1hv88IlnsglSLWrrW8D0Y7Rojpfq1TRO56XpGRik=
+github.com/awsdocs/aws-doc-sdk-examples/gov2/s3 v0.0.0-20261001152457-46ec94678534/go.mod h1:b8BAB8mmHAqK5I3E/XGec/YsMluvw897GnYG+VXyDXY=
+github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools v0.0.0-20240907001412-a9375541143b h1:UmPy4pArM7SIhTX2Xn5bhOkgI9onSUQ1Y9fxgDJ3pHU=
+github.com/awsdocs/aws-doc-sdk-examples/gov2/testtools v0.0.0-20240907001412-a9375541143b/go.mod h1:9Oj/8PZn3D5Ftp/Z1QWrIEFE0daERMqfJawL9duHRfc=
 github.com/aymerick/douceur v0.2.0 h1:Mv+mAeH1Q+n9Fr+oyamOlAkUNPWPlA8PPGR0QAaYuPk=
 github.com/aymerick/douceur v0.2.0/go.mod h1:wlT5vV2O3h55X9m7iVYN0TBM0NH/MmbLnd30/FjWUq4=
 github.com/bmatcuk/doublestar/v4 v4.6.1/go.mod h1:xBQ8jztBU6kakFMg+8WGxn0c6z1fTSPVIjEY1Wr7jzc=

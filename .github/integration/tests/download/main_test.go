@@ -1,21 +1,67 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/md5"
+	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/neicnordic/crypt4gh/keys"
+	"github.com/neicnordic/crypt4gh/streaming"
 	"github.com/stretchr/testify/suite"
 )
+
+// The seeded file: database_seed creates seedFileID from the real Crypt4GH
+// file that scripts/make_download_v2_testfile.sh writes to /shared.
+const (
+	seedDatasetID     = "EGAD00000000001"
+	seedFileID        = "EGAF00000000001"
+	seedPlaintextFile = "/shared/testfile"
+	seedBodyFile      = "/shared/testfile.body"   // header-stripped archive object
+	seedSHA256File    = "/shared/testfile.sha256" // hex SHA-256 of the plaintext
+)
+
+// Further files in seedDatasetID, all backed by the same archive object
+// (see scripts/seed_download_v2_db.sh).
+const (
+	unicodeFileID        = "EGAF00000000002"
+	unicodeFilePath      = `special/it's a "quoted" fïle.c4gh`
+	quotedFileID         = "EGAF00000000003"
+	quotedFilePath       = `special/with space "and quote".c4gh`
+	multiChecksumFileID  = "EGAF00000000004" // SHA256 and MD5 UNENCRYPTED checksums
+	renamedFileID        = "EGAF00000000005"
+	renamedSubmittedPath = "special/0-submitted-name.c4gh"
+	renamedDownloadPath  = "special/zz-download-name.c4gh" // file_dataset.download_path
+	tiedPathFileID       = "EGAF00000000006"               // same effective path as multiChecksumFileID
+)
+
+// datasetFile is a file entry from GET /datasets/:datasetId/files.
+type datasetFile struct {
+	FileID    string         `json:"fileId"`
+	FilePath  string         `json:"filePath"`
+	Checksums []fileChecksum `json:"checksums"`
+}
+
+type fileChecksum struct {
+	Type     string `json:"type"`
+	Checksum string `json:"checksum"`
+}
 
 // TestSuite defines the download service integration test suite
 type TestSuite struct {
@@ -28,9 +74,12 @@ type TestSuite struct {
 	// Generated tokens
 	token string
 
+	// Recipient key pair for re-encrypted downloads. It is not the archive key,
+	// so a stored header passed through without re-encryption cannot decrypt.
+	recipientPublicKey  string // base64 PEM, as sent in X-C4GH-Public-Key
+	recipientPrivateKey [32]byte
+
 	// Environment capabilities (probed once in SetupSuite)
-	hasReencrypt    bool // true if re-encryption works with seed data
-	hasStorageFile  bool // true if the test file is accessible in storage
 	hasSessionCache bool // true if session cookies are being set
 }
 
@@ -50,6 +99,11 @@ func (ts *TestSuite) SetupSuite() {
 		ts.FailNow("failed to generate token", err.Error())
 	}
 
+	ts.recipientPublicKey, ts.recipientPrivateKey, err = generateRecipientKey()
+	if err != nil {
+		ts.FailNow("failed to generate recipient key", err.Error())
+	}
+
 	// Wait for download service to be ready
 	ts.waitForService()
 
@@ -58,29 +112,9 @@ func (ts *TestSuite) SetupSuite() {
 }
 
 // probeCapabilities tests environment-specific features once and caches results.
-// This avoids skipping on generic 500 — tests skip on known missing prerequisites.
 func (ts *TestSuite) probeCapabilities() {
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		return
-	}
-
-	// Probe re-encryption: HEAD /files/:fileId with public key
-	pubkey := ts.readPublicKeyBase64()
-	if pubkey != "" {
-		headers := ts.authHeaders()
-		headers["X-C4GH-Public-Key"] = pubkey
-		resp, _, reqErr := ts.doRequest("HEAD", "/files/"+fileID, nil, headers)
-		ts.hasReencrypt = reqErr == nil && resp.StatusCode == http.StatusOK
-	}
-
-	// Probe storage access: GET /files/:fileId/content
-	resp, _, reqErr := ts.doRequest("GET", "/files/"+fileID+"/content", nil, ts.authHeaders())
-	ts.hasStorageFile = reqErr == nil && resp.StatusCode == http.StatusOK
-
 	// Probe session cookie. The service only sets sda_session on a request it
-	// authenticates from scratch, and ts.token is already in its token cache
-	// from getFirstFileID above, so probe with a token it has not seen.
+	// authenticates from scratch, so probe with a token it has not seen.
 	if probeToken, tokenErr := ts.generateToken("integration_test@example.org"); tokenErr == nil {
 		req, _ := http.NewRequestWithContext(context.Background(), "GET", ts.downloadURL+"/datasets", nil)
 		req.Header.Set("Authorization", "Bearer "+probeToken)
@@ -91,8 +125,7 @@ func (ts *TestSuite) probeCapabilities() {
 		}
 	}
 
-	ts.T().Logf("Environment capabilities: reencrypt=%v, storageFile=%v, sessionCache=%v",
-		ts.hasReencrypt, ts.hasStorageFile, ts.hasSessionCache)
+	ts.T().Logf("Environment capabilities: sessionCache=%v", ts.hasSessionCache)
 }
 
 func (ts *TestSuite) waitForService() {
@@ -237,10 +270,7 @@ func (ts *TestSuite) Test05_GetDatasetInfo() {
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
 
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available - skipping dataset info test")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
@@ -271,10 +301,7 @@ func (ts *TestSuite) Test06_ListFilesInDataset() {
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
 
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available - skipping files list test")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
@@ -292,58 +319,43 @@ func (ts *TestSuite) Test06_ListFilesInDataset() {
 	ts.T().Logf("Found %d file(s) in dataset %s", len(filesResp.Files), datasetID)
 }
 
-// Test07_DownloadWithReencryption tests file download with re-encryption
+// Test07_DownloadWithReencryption tests file download with re-encryption and
+// proves it end to end by decrypting the download with the recipient key
 func (ts *TestSuite) Test07_DownloadWithReencryption() {
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping download test: " + err.Error())
-		return
-	}
-
-	pubkeyBase64 := ts.readPublicKeyBase64()
-	headers := ts.authHeaders()
-	headers["X-C4GH-Public-Key"] = pubkeyBase64
-
-	resp, body, err := ts.doRequest("GET", "/files/"+fileID, nil, headers)
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID, nil, ts.reencryptHeaders())
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusOK, resp.StatusCode, "download should return 200")
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "download should return 200")
+	ts.Require().GreaterOrEqual(len(body), 8)
+	ts.Equal("crypt4gh", string(body[:8]), "file should have crypt4gh magic bytes")
 
-	if len(body) >= 8 {
-		magic := string(body[:8])
-		ts.Equal("crypt4gh", magic, "file should have crypt4gh magic bytes")
-	}
+	ts.Equal(ts.seedPlaintextSHA256(), ts.decryptedSHA256(body),
+		"decrypted download should match the seeded plaintext")
 }
 
-// Test08_RangeRequest tests partial file download with Range header
+// Test08_RangeRequest tests partial file download with Range header across
+// the boundary between the re-encrypted header and the archive body
 func (ts *TestSuite) Test08_RangeRequest() {
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping range request test")
-		return
-	}
-
-	pubkeyBase64 := ts.readPublicKeyBase64()
-	headers := ts.authHeaders()
-	headers["X-C4GH-Public-Key"] = pubkeyBase64
-	headers["Range"] = "bytes=0-99"
-
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID, nil, headers)
+	headers := ts.reencryptHeaders()
+	resp, _, err := ts.doRequest("HEAD", "/files/"+seedFileID, nil, headers)
 	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode)
 
-	// Accept either 206 (Partial Content) or 200 (full content if small file)
-	ts.True(resp.StatusCode == http.StatusOK ||
-		resp.StatusCode == http.StatusPartialContent,
-		"range request should return 200 or 206, got %d", resp.StatusCode)
+	archiveBody := ts.seedArchiveBody()
+	totalSize := resp.ContentLength
+	headerSize := totalSize - int64(len(archiveBody))
+	ts.Require().Positive(headerSize, "HEAD Content-Length should cover header and archive body")
+
+	// The re-encrypted header differs per request (fresh ephemeral key), so
+	// only the body part of the range can be compared byte for byte.
+	start, end := headerSize-10, headerSize+99
+	headers["Range"] = fmt.Sprintf("bytes=%d-%d", start, end)
+
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID, nil, headers)
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusPartialContent, resp.StatusCode, "range request should return 206")
+	ts.Equal(fmt.Sprintf("bytes %d-%d/%d", start, end, totalSize), resp.Header.Get("Content-Range"))
+	ts.Require().Len(body, int(end-start+1))
+	ts.Equal(archiveBody[:100], body[10:], "range should continue from the header into the archive body")
 }
 
 // Test09_AccessControlNonExistentFile tests that non-existent files return 403
@@ -396,32 +408,17 @@ func (ts *TestSuite) Test12_OpaqueTokenListDatasets() {
 
 // Test13_OpaqueTokenDownloadFile tests file download using an opaque token
 func (ts *TestSuite) Test13_OpaqueTokenDownloadFile() {
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping opaque token download test: " + err.Error())
-		return
-	}
-
-	pubkeyBase64 := ts.readPublicKeyBase64()
 	opaqueToken := "integration_test@example.org"
 	headers := map[string]string{
 		"Authorization":     "Bearer " + opaqueToken,
-		"X-C4GH-Public-Key": pubkeyBase64,
+		"X-C4GH-Public-Key": ts.recipientPublicKey,
 	}
 
-	resp, body, err := ts.doRequest("GET", "/files/"+fileID, nil, headers)
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID, nil, headers)
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusOK, resp.StatusCode, "opaque token download should return 200")
-
-	if len(body) >= 8 {
-		magic := string(body[:8])
-		ts.Equal("crypt4gh", magic, "file should have crypt4gh magic bytes")
-	}
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "opaque token download should return 200")
+	ts.Equal(ts.seedPlaintextSHA256(), ts.decryptedSHA256(body),
+		"decrypted download should match the seeded plaintext")
 }
 
 // Test14_OpaqueTokenArbitrarySubject tests that any opaque token with a valid
@@ -532,85 +529,43 @@ func (ts *TestSuite) Test18_ServiceInfo() {
 
 // Test19_HeadFileEndpoint tests HEAD /files/:fileId returns metadata without body
 func (ts *TestSuite) Test19_HeadFileEndpoint() {
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping HEAD file test: " + err.Error())
-		return
-	}
-
-	pubkeyBase64 := ts.readPublicKeyBase64()
-	if pubkeyBase64 == "" {
-		ts.T().Skip("No public key available - skipping HEAD file test")
-		return
-	}
-
-	headers := ts.authHeaders()
-	headers["X-C4GH-Public-Key"] = pubkeyBase64
-
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	resp, body, err := ts.doRequest("HEAD", "/files/"+fileID, nil, headers)
+	resp, body, err := ts.doRequest("HEAD", "/files/"+seedFileID, nil, ts.reencryptHeaders())
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusOK, resp.StatusCode, "HEAD /files/:fileId should return 200")
 	ts.Empty(body, "HEAD response should have no body")
-	ts.NotEmpty(resp.Header.Get("Content-Length"), "HEAD response should have Content-Length header")
+	ts.Greater(resp.ContentLength, int64(len(ts.seedArchiveBody())),
+		"HEAD Content-Length should cover the re-encrypted header and the archive body")
 	ts.NotEmpty(resp.Header.Get("Content-Type"), "HEAD response should have Content-Type header")
 }
 
 // Test20_SplitContentEndpoint tests GET /files/:fileId/content returns raw archive bytes
 func (ts *TestSuite) Test20_SplitContentEndpoint() {
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping content endpoint test: " + err.Error())
-		return
-	}
-
-	if !ts.hasStorageFile {
-		ts.T().Skip("REQUIRES_STORAGE_FILE: test file not accessible in storage")
-		return
-	}
-
-	resp, body, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, ts.authHeaders())
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, ts.authHeaders())
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusOK, resp.StatusCode, "GET /files/:fileId/content should return 200")
-	ts.NotEmpty(body, "content response should have a body")
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "GET /files/:fileId/content should return 200")
+	ts.True(bytes.Equal(ts.seedArchiveBody(), body), "content response should be the archived body")
 	ts.NotEmpty(resp.Header.Get("ETag"), "content response should have ETag header")
 	ts.Equal("bytes", resp.Header.Get("Accept-Ranges"), "content response should have Accept-Ranges: bytes")
 }
 
-// Test21_SplitHeaderEndpoint tests GET /files/:fileId/header returns re-encrypted header
+// Test21_SplitHeaderEndpoint tests GET /files/:fileId/header returns a
+// re-encrypted header that decrypts the /content body
 func (ts *TestSuite) Test21_SplitHeaderEndpoint() {
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available - skipping header endpoint test: " + err.Error())
-		return
-	}
-
-	pubkeyPath := getEnv("C4GH_PUBKEY_FILE", "/shared/c4gh.pub.pem")
-	pubkeyBytes, err := os.ReadFile(pubkeyPath)
-	if err != nil {
-		ts.T().Skipf("No public key available at %s - skipping header endpoint test", pubkeyPath)
-		return
-	}
-	pubkeyBase64 := base64.StdEncoding.EncodeToString(pubkeyBytes)
-
-	headers := ts.authHeaders()
-	headers["X-C4GH-Public-Key"] = pubkeyBase64
-
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	resp, body, err := ts.doRequest("GET", "/files/"+fileID+"/header", nil, headers)
+	resp, header, err := ts.doRequest("GET", "/files/"+seedFileID+"/header", nil, ts.reencryptHeaders())
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusOK, resp.StatusCode, "GET /files/:fileId/header should return 200")
-	ts.NotEmpty(body, "header response should have a body")
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "GET /files/:fileId/header should return 200")
+	ts.Require().NotEmpty(header, "header response should have a body")
 	ts.Equal("application/octet-stream", resp.Header.Get("Content-Type"),
 		"header response should have Content-Type: application/octet-stream")
+	contentETag := resp.Header.Get("SDA-Content-ETag")
+
+	resp, content, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, ts.authHeaders())
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "GET /files/:fileId/content should return 200")
+	ts.Equal(resp.Header.Get("ETag"), contentETag, "SDA-Content-ETag from /header should match the /content ETag")
+
+	ts.Equal(ts.seedPlaintextSHA256(), ts.decryptedSHA256(append(header, content...)),
+		"/header followed by /content should decrypt to the seeded plaintext")
 }
 
 // Test22_ProblemDetailsFormat tests that error responses use application/problem+json
@@ -693,60 +648,28 @@ func (ts *TestSuite) Test25_EncodedSlashDatasetID() {
 
 // Test26_InvalidRangeHeader tests that malformed Range headers return 400
 func (ts *TestSuite) Test26_InvalidRangeHeader() {
-	if !ts.hasStorageFile {
-		ts.T().Skip("REQUIRES_STORAGE_FILE: test file not accessible in storage")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available: " + err.Error())
-		return
-	}
-
 	headers := ts.authHeaders()
 	headers["Range"] = "invalid"
 
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, headers)
+	resp, _, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, headers)
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusBadRequest, resp.StatusCode, "malformed Range header should return 400")
 }
 
 // Test27_MultiRangeRejected tests that multi-range requests return 400
 func (ts *TestSuite) Test27_MultiRangeRejected() {
-	if !ts.hasStorageFile {
-		ts.T().Skip("REQUIRES_STORAGE_FILE: test file not accessible in storage")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available: " + err.Error())
-		return
-	}
-
 	headers := ts.authHeaders()
 	headers["Range"] = "bytes=0-10,20-30"
 
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, headers)
+	resp, _, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, headers)
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusBadRequest, resp.StatusCode, "multi-range request should return 400")
 }
 
 // Test28_IfRangeETagContract tests the If-Range header with valid and stale ETags
 func (ts *TestSuite) Test28_IfRangeETagContract() {
-	if !ts.hasStorageFile {
-		ts.T().Skip("REQUIRES_STORAGE_FILE: test file not accessible in storage")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available: " + err.Error())
-		return
-	}
-
-	etag := ts.getContentETag(fileID)
+	archiveBody := ts.seedArchiveBody()
+	etag := ts.getContentETag(seedFileID)
 	ts.Require().NotEmpty(etag, "HEAD /files/:fileId/content should return ETag")
 
 	// Valid ETag in If-Range + Range → 206 Partial Content
@@ -754,47 +677,34 @@ func (ts *TestSuite) Test28_IfRangeETagContract() {
 	headers["If-Range"] = etag
 	headers["Range"] = "bytes=0-99"
 
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, headers)
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, headers)
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusPartialContent, resp.StatusCode,
+	ts.Require().Equal(http.StatusPartialContent, resp.StatusCode,
 		"valid If-Range ETag + Range should return 206")
+	ts.Equal(archiveBody[:100], body, "206 response should be the requested range of the archived body")
 
 	// Stale ETag in If-Range + Range → 200 full content (range not honored)
 	headers2 := ts.authHeaders()
 	headers2["If-Range"] = `"stale-etag-value"`
 	headers2["Range"] = "bytes=0-99"
 
-	resp2, _, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, headers2)
+	resp2, body2, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, headers2)
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusOK, resp2.StatusCode,
 		"stale If-Range ETag + Range should return 200 (full content)")
+	ts.True(bytes.Equal(archiveBody, body2), "200 response should be the full archived body")
 }
 
 // Test29_ContentDispositionFilename tests that downloads set Content-Disposition correctly
 func (ts *TestSuite) Test29_ContentDispositionFilename() {
-	if !ts.hasReencrypt {
-		ts.T().Skip("REQUIRES_REENCRYPT: seed header cannot be re-encrypted")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available: " + err.Error())
-		return
-	}
-
-	pubkeyBase64 := ts.readPublicKeyBase64()
-	headers := ts.authHeaders()
-	headers["X-C4GH-Public-Key"] = pubkeyBase64
-
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID, nil, headers)
+	resp, _, err := ts.doRequest("GET", "/files/"+seedFileID, nil, ts.reencryptHeaders())
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusOK, resp.StatusCode, "download should return 200")
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "download should return 200")
 
-	cd := resp.Header.Get("Content-Disposition")
-	ts.NotEmpty(cd, "response should have Content-Disposition header")
-	ts.Contains(cd, "attachment", "Content-Disposition should be attachment")
-	ts.Contains(cd, "test-file.c4gh", "Content-Disposition should contain the filename")
+	disposition, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	ts.Require().NoError(err, "response should have a valid Content-Disposition header")
+	ts.Equal("attachment", disposition, "Content-Disposition should be attachment")
+	ts.Equal("test-file.c4gh", params["filename"], "Content-Disposition should carry the filename")
 }
 
 // Test30_PathPrefixFilter tests the pathPrefix and filePath query parameters
@@ -808,10 +718,7 @@ func (ts *TestSuite) Test30_PathPrefixFilter() {
 	}
 	err = json.Unmarshal(body, &datasetsResp)
 	ts.Require().NoError(err)
-	if len(datasetsResp.Datasets) == 0 {
-		ts.T().Skip("No datasets available")
-		return
-	}
+	ts.Require().NotEmpty(datasetsResp.Datasets, "seeded dataset should be listed")
 
 	datasetID := datasetsResp.Datasets[0]
 
@@ -924,18 +831,12 @@ func (ts *TestSuite) Test32_PageTokenValidation() {
 }
 
 // Test33_LongTransferResume tests the expired-token-then-resume scenario:
-// an expired token with Range should return 401, a fresh token with Range should return 206.
+// an expired token with Range should return 401, a fresh token with Range
+// should return 206 and the rest of the body from the resume offset.
 func (ts *TestSuite) Test33_LongTransferResume() {
-	if !ts.hasStorageFile {
-		ts.T().Skip("REQUIRES_STORAGE_FILE: test file not accessible in storage")
-		return
-	}
-
-	fileID, err := ts.getFirstFileID()
-	if err != nil {
-		ts.T().Skip("No files available: " + err.Error())
-		return
-	}
+	archiveBody := ts.seedArchiveBody()
+	resumeFrom := len(archiveBody) / 2
+	rangeHeader := fmt.Sprintf("bytes=%d-", resumeFrom)
 
 	// Step 1: Expired token + Range → 401
 	expiredToken, err := ts.generateTokenWithExpiry(
@@ -946,81 +847,288 @@ func (ts *TestSuite) Test33_LongTransferResume() {
 
 	expiredHeaders := map[string]string{
 		"Authorization": "Bearer " + expiredToken,
-		"Range":         "bytes=0-99",
+		"Range":         rangeHeader,
 	}
-	resp, _, err := ts.doRequest("GET", "/files/"+fileID+"/content", nil, expiredHeaders)
+	resp, _, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, expiredHeaders)
 	ts.Require().NoError(err)
 	ts.Equal(http.StatusUnauthorized, resp.StatusCode,
 		"expired token + Range should return 401")
 
 	// Step 2: Fresh token + Range → 206
 	freshHeaders := ts.authHeaders()
-	freshHeaders["Range"] = "bytes=0-99"
+	freshHeaders["Range"] = rangeHeader
 
-	resp, _, err = ts.doRequest("GET", "/files/"+fileID+"/content", nil, freshHeaders)
+	resp, body, err := ts.doRequest("GET", "/files/"+seedFileID+"/content", nil, freshHeaders)
 	ts.Require().NoError(err)
-	ts.Equal(http.StatusPartialContent, resp.StatusCode,
+	ts.Require().Equal(http.StatusPartialContent, resp.StatusCode,
 		"fresh token + Range should return 206 (resume succeeds)")
+	ts.Equal(fmt.Sprintf("bytes %d-%d/%d", resumeFrom, len(archiveBody)-1, len(archiveBody)),
+		resp.Header.Get("Content-Range"))
+	ts.True(bytes.Equal(archiveBody[resumeFrom:], body), "resumed body should continue from the Range offset")
 }
 
-// Helper function to get the first available file ID
-func (ts *TestSuite) getFirstFileID() (string, error) {
-	resp, body, err := ts.doRequest("GET", "/datasets", nil, ts.authHeaders())
-	if err != nil {
-		return "", err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get datasets: status %d", resp.StatusCode)
-	}
+// Test34_PaginationTraversal follows nextPageToken across all pages and checks
+// that the pages list every file exactly once, in the unpaginated order
+func (ts *TestSuite) Test34_PaginationTraversal() {
+	for _, tc := range []struct {
+		filter url.Values
+		files  []string
+	}{
+		{url.Values{}, []string{seedFileID, unicodeFileID, quotedFileID, multiChecksumFileID, renamedFileID, tiedPathFileID}},
+		{url.Values{"pathPrefix": {"special/"}}, []string{unicodeFileID, quotedFileID, renamedFileID}},
+		// Two files share this effective path, so paging has to break the tie
+		{url.Values{"pathPrefix": {"multi-checksum"}}, []string{multiChecksumFileID, tiedPathFileID}},
+		{url.Values{"filePath": {"multi-checksum.c4gh"}}, []string{multiChecksumFileID, tiedPathFileID}},
+	} {
+		all := ts.listFilePages(tc.filter)
+		ts.Require().Len(all, 1, "default page size should fit the whole listing (%v)", tc.filter)
+		want := fileIDs(all[0])
+		ts.Require().ElementsMatch(tc.files, want, "unpaginated listing should hold each seeded file once (%v)", tc.filter)
 
-	var datasetsResp struct {
-		Datasets []string `json:"datasets"`
-	}
-	if err := json.Unmarshal(body, &datasetsResp); err != nil {
-		return "", err
-	}
-	if len(datasetsResp.Datasets) == 0 {
-		return "", fmt.Errorf("no datasets available")
-	}
+		for _, pageSize := range []int{1, 2} {
+			paged := url.Values{"pageSize": {strconv.Itoa(pageSize)}}
+			for k, v := range tc.filter {
+				paged[k] = v
+			}
 
-	datasetID := datasetsResp.Datasets[0]
+			pages := ts.listFilePages(paged)
+			ts.Len(pages, (len(want)+pageSize-1)/pageSize, "page count for %v", paged)
 
-	resp, body, err = ts.doRequest("GET", "/datasets/"+datasetID+"/files", nil, ts.authHeaders())
-	if err != nil {
-		return "", err
+			var got []string
+			for _, page := range pages {
+				ts.NotEmpty(page, "no page should be empty (%v)", paged)
+				ts.LessOrEqual(len(page), pageSize, "page should respect pageSize (%v)", paged)
+				got = append(got, fileIDs(page)...)
+			}
+			ts.Equal(want, got, "pages should continue without gaps or overlap (%v)", paged)
+		}
 	}
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("failed to get files: status %d", resp.StatusCode)
-	}
-
-	var filesResp struct {
-		Files []map[string]any `json:"files"`
-	}
-	if err := json.Unmarshal(body, &filesResp); err != nil {
-		return "", err
-	}
-	if len(filesResp.Files) == 0 {
-		return "", fmt.Errorf("no files in dataset")
-	}
-
-	fileID, ok := filesResp.Files[0]["fileId"].(string)
-	if !ok {
-		return "", fmt.Errorf("file missing 'fileId' field")
-	}
-
-	return fileID, nil
 }
 
-// readPublicKeyBase64 reads the C4GH public key and returns it as base64.
-// Returns empty string if the key file is not available.
-func (ts *TestSuite) readPublicKeyBase64() string {
-	pubkeyPath := getEnv("C4GH_PUBKEY_FILE", "/shared/c4gh.pub.pem")
-	pubkeyBytes, err := os.ReadFile(pubkeyPath)
-	if err != nil {
-		return ""
+// Test35_MultiChecksumPagination tests that a file with more than one
+// UNENCRYPTED checksum is listed once, carrying all its checksums
+func (ts *TestSuite) Test35_MultiChecksumPagination() {
+	plaintext, err := os.ReadFile(seedPlaintextFile)
+	ts.Require().NoError(err)
+	wantMD5 := fmt.Sprintf("%x", md5.Sum(plaintext))
+
+	for _, pageSize := range []string{"1", "100"} {
+		var listed []datasetFile
+		for _, page := range ts.listFilePages(url.Values{"pageSize": {pageSize}}) {
+			for _, f := range page {
+				if f.FileID == multiChecksumFileID {
+					listed = append(listed, f)
+				}
+			}
+		}
+		ts.Require().Len(listed, 1, "file with two checksums should be listed once (pageSize=%s)", pageSize)
+
+		ts.ElementsMatch([]fileChecksum{{"sha256", ts.seedPlaintextSHA256()}, {"md5", wantMD5}}, listed[0].Checksums,
+			"listing should carry exactly the UNENCRYPTED checksums (pageSize=%s)", pageSize)
+	}
+}
+
+// Test36_ContentDispositionEscaping tests Content-Disposition for filenames
+// with spaces, quotes and non-ASCII characters
+func (ts *TestSuite) Test36_ContentDispositionEscaping() {
+	for _, tc := range []struct {
+		fileID   string
+		filename string
+	}{
+		{unicodeFileID, `it's a "quoted" fïle.c4gh`},
+		{quotedFileID, `with space "and quote".c4gh`},
+	} {
+		resp, _, err := ts.doRequest("GET", "/files/"+tc.fileID, nil, ts.reencryptHeaders())
+		ts.Require().NoError(err)
+		ts.Require().Equal(http.StatusOK, resp.StatusCode, "download of %s should return 200", tc.fileID)
+
+		cd := resp.Header.Get("Content-Disposition")
+		ts.Regexp(`^[\x20-\x7e]+$`, cd, "Content-Disposition should be escaped to printable ASCII")
+		disposition, params, err := mime.ParseMediaType(cd)
+		ts.Require().NoError(err, "Content-Disposition %q should parse", cd)
+		ts.Equal("attachment", disposition)
+		ts.Equal(tc.filename, params["filename"], "Content-Disposition %q should round-trip the filename", cd)
+	}
+}
+
+// Test37_SpecialCharacterPathFilters tests filePath and pathPrefix filtering
+// on paths with spaces, quotes and non-ASCII characters
+func (ts *TestSuite) Test37_SpecialCharacterPathFilters() {
+	for _, tc := range []struct {
+		filter url.Values
+		fileID string
+		path   string
+	}{
+		{url.Values{"filePath": {unicodeFilePath}}, unicodeFileID, unicodeFilePath},
+		{url.Values{"pathPrefix": {`special/it's a "quoted" fï`}}, unicodeFileID, unicodeFilePath},
+		{url.Values{"filePath": {quotedFilePath}}, quotedFileID, quotedFilePath},
+		{url.Values{"pathPrefix": {`special/with space "and`}}, quotedFileID, quotedFilePath},
+	} {
+		pages := ts.listFilePages(tc.filter)
+		ts.Require().Len(pages, 1)
+		ts.Require().Len(pages[0], 1, "%v should match exactly one file", tc.filter)
+		ts.Equal(tc.fileID, pages[0][0].FileID, "%v should match %s", tc.filter, tc.fileID)
+		ts.Equal(tc.path, pages[0][0].FilePath)
+	}
+}
+
+// Test38_DownloadPathOverride tests that file_dataset.download_path replaces
+// the submitted path in listings, filters and Content-Disposition
+func (ts *TestSuite) Test38_DownloadPathOverride() {
+	for _, filter := range []url.Values{
+		{"filePath": {renamedDownloadPath}},
+		{"pathPrefix": {"special/zz-"}},
+	} {
+		pages := ts.listFilePages(filter)
+		ts.Require().Len(pages, 1)
+		ts.Require().Len(pages[0], 1, "%v should match the download path", filter)
+		ts.Equal(renamedFileID, pages[0][0].FileID)
+		ts.Equal(renamedDownloadPath, pages[0][0].FilePath)
 	}
 
-	return base64.StdEncoding.EncodeToString(pubkeyBytes)
+	for _, filter := range []url.Values{
+		{"filePath": {renamedSubmittedPath}},
+		{"pathPrefix": {"special/0-"}},
+	} {
+		pages := ts.listFilePages(filter)
+		ts.Require().Len(pages, 1)
+		ts.Empty(pages[0], "%v should not match the overridden submitted path", filter)
+	}
+
+	resp, _, err := ts.doRequest("HEAD", "/files/"+renamedFileID, nil, ts.reencryptHeaders())
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode)
+	_, params, err := mime.ParseMediaType(resp.Header.Get("Content-Disposition"))
+	ts.Require().NoError(err)
+	ts.Equal("zz-download-name.c4gh", params["filename"])
+}
+
+// Test39_DrsObjectChecksums tests that the DRS object for the seeded file
+// carries the ARCHIVED checksum of the archive body and points at /content
+func (ts *TestSuite) Test39_DrsObjectChecksums() {
+	resp, body, err := ts.doRequest("GET", "/objects/"+seedDatasetID+"/test-file.c4gh", nil, ts.authHeaders())
+	ts.Require().NoError(err)
+	ts.Require().Equal(http.StatusOK, resp.StatusCode, "DRS object should return 200")
+
+	var obj struct {
+		ID            string         `json:"id"`
+		Size          int64          `json:"size"`
+		Checksums     []fileChecksum `json:"checksums"`
+		AccessMethods []struct {
+			AccessURL struct {
+				URL string `json:"url"`
+			} `json:"access_url"`
+		} `json:"access_methods"`
+	}
+	ts.Require().NoError(json.Unmarshal(body, &obj), "DRS object should be valid JSON")
+
+	archiveBody := ts.seedArchiveBody()
+	ts.Equal(seedFileID, obj.ID)
+	ts.Equal(int64(len(archiveBody)), obj.Size, "DRS size should be the archived body size")
+	ts.Equal([]fileChecksum{{"sha-256", fmt.Sprintf("%x", sha256.Sum256(archiveBody))}}, obj.Checksums,
+		"DRS checksums should be the ARCHIVED checksum of the body")
+	ts.Require().Len(obj.AccessMethods, 1)
+	ts.True(strings.HasSuffix(obj.AccessMethods[0].AccessURL.URL, "/files/"+seedFileID+"/content"),
+		"DRS access URL %q should point at the content endpoint", obj.AccessMethods[0].AccessURL.URL)
+}
+
+// listFilePages lists seedDatasetID's files with the given query parameters,
+// following nextPageToken until the last page, and returns every page.
+func (ts *TestSuite) listFilePages(query url.Values) [][]datasetFile {
+	params := url.Values{}
+	for k, v := range query {
+		params[k] = v
+	}
+
+	var pages [][]datasetFile
+	for range 20 {
+		path := "/datasets/" + seedDatasetID + "/files?" + params.Encode()
+		resp, body, err := ts.doRequest("GET", path, nil, ts.authHeaders())
+		ts.Require().NoError(err)
+		ts.Require().Equal(http.StatusOK, resp.StatusCode, "GET %s should return 200", path)
+
+		var page struct {
+			Files         []datasetFile `json:"files"`
+			NextPageToken *string       `json:"nextPageToken"`
+		}
+		ts.Require().NoError(json.Unmarshal(body, &page), "GET %s should return valid JSON", path)
+		pages = append(pages, page.Files)
+
+		if page.NextPageToken == nil {
+			return pages
+		}
+		params.Set("pageToken", *page.NextPageToken)
+	}
+
+	ts.FailNow("pagination did not reach a last page", "query %v", query)
+
+	return nil
+}
+
+// fileIDs returns the file IDs of a listing page in order.
+func fileIDs(files []datasetFile) []string {
+	ids := make([]string, 0, len(files))
+	for _, f := range files {
+		ids = append(ids, f.FileID)
+	}
+
+	return ids
+}
+
+// generateRecipientKey creates a Crypt4GH key pair and returns the public key
+// as clients send it in X-C4GH-Public-Key: base64 of the PEM encoding.
+func generateRecipientKey() (string, [32]byte, error) {
+	publicKey, privateKey, err := keys.GenerateKeyPair()
+	if err != nil {
+		return "", privateKey, err
+	}
+
+	var pemKey bytes.Buffer
+	if err := keys.WriteCrypt4GHX25519PublicKey(&pemKey, publicKey); err != nil {
+		return "", privateKey, err
+	}
+
+	return base64.StdEncoding.EncodeToString(pemKey.Bytes()), privateKey, nil
+}
+
+// reencryptHeaders returns the auth headers plus the recipient public key
+// that download endpoints re-encrypt the header for.
+func (ts *TestSuite) reencryptHeaders() map[string]string {
+	headers := ts.authHeaders()
+	headers["X-C4GH-Public-Key"] = ts.recipientPublicKey
+
+	return headers
+}
+
+// seedArchiveBody returns the header-stripped body stored as the archive object.
+func (ts *TestSuite) seedArchiveBody() []byte {
+	body, err := os.ReadFile(seedBodyFile)
+	ts.Require().NoError(err, "seeded archive body should be readable")
+
+	return body
+}
+
+// seedPlaintextSHA256 returns the hex SHA-256 of the seeded file's plaintext.
+func (ts *TestSuite) seedPlaintextSHA256() string {
+	sum, err := os.ReadFile(seedSHA256File)
+	ts.Require().NoError(err, "seeded plaintext checksum should be readable")
+
+	return strings.TrimSpace(string(sum))
+}
+
+// decryptedSHA256 decrypts a Crypt4GH stream with the recipient private key
+// and returns the hex SHA-256 of the plaintext. Callers must compare the
+// digest: the reader does not report a stream cut at a segment boundary.
+func (ts *TestSuite) decryptedSHA256(c4gh []byte) string {
+	reader, err := streaming.NewCrypt4GHReader(bytes.NewReader(c4gh), ts.recipientPrivateKey, nil)
+	ts.Require().NoError(err, "download should decrypt with the recipient key")
+	defer reader.Close()
+
+	hash := sha256.New()
+	_, err = io.Copy(hash, reader)
+	ts.Require().NoError(err, "download body should decrypt")
+
+	return hex.EncodeToString(hash.Sum(nil))
 }
 
 // generateTokenWithExpiry creates a JWT token with a custom expiry time.
