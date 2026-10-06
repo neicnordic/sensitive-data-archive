@@ -60,14 +60,18 @@ The rationale is in [Pros and Cons of the Options](#pros-and-cons-of-the-options
 
 ### Flow
 
-```text
-label "megalocnus"  -->  claude_refine  -->  plan comment + label "megalocnus:planned"
-        ^                                              |
-        +---- "@megalocnus replan" <-- human reads ----+
-                                                       v
-                         "@megalocnus go"  -->  claude_implement  -->  draft PR
-                                                                          |
-                                         humans: review, CI, merge queue
+```mermaid
+flowchart TD
+    label["Team member adds label <code>megalocnus</code>"] --> refine
+    replan["Team member comments <code>@megalocnus replan</code>"] --> refine
+    refine["<b>claude_refine</b><br/>read-only: reads issue, comments, code"] --> plan
+    plan["Plan comment<br/>+ label <code>megalocnus:planned</code>"] --> human{"Human reads the plan"}
+    human -- "needs changes" --> replan
+    human -- "<code>@megalocnus go</code>" --> implement
+    implement["<b>claude_implement</b><br/>branch, code, build, test, lint"] --> pr
+    implement -. "needs a workflow change" .-> stop["Stops and comments on the issue"]
+    implement -. "rate limit, timeout or crash" .-> retry["Comments with run log<br/>label stays, a new go retries"]
+    pr["Draft PR linked to the issue<br/>label <code>megalocnus:planned</code> removed"] --> review["Humans: review, CI,<br/>two approvals, merge queue"]
 ```
 
 **Refine** runs when someone with write access adds the `megalocnus` label, or comments `@megalocnus replan`.
