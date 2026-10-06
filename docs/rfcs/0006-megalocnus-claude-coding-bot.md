@@ -67,33 +67,42 @@ flowchart TD
     refine["<b>claude_refine</b><br/>read-only: reads issue, comments, code"] --> plan
     plan["Plan comment<br/>+ label <code>megalocnus:planned</code>"] --> human{"Human reads the plan"}
     human -- "needs changes" --> replan
-    human -- "<code>@megalocnus go</code>" --> implement
-    implement["<b>claude_implement</b><br/>branch, code, build, test, lint"] --> pr
-    implement -. "needs a workflow change" .-> stop["Stops and comments on the issue"]
-    implement -. "rate limit, timeout or crash" .-> retry["Comments with run log<br/>label stays, a new go retries"]
+    human -- "<code>@megalocnus go</code>" --> agent
+    agent["<b>Agent job</b><br/>Claude writes the change<br/>OAuth token only, no write access"] -- "patch" --> publish
+    publish["<b>Publish job</b><br/>fresh App token, no model, no generated code<br/>commit, branch, draft PR"] --> pr
+    agent -. "needs a workflow change" .-> stop["Publish job comments on the issue"]
+    agent -. "turns or time used up" .-> partial["Publish job opens the draft PR<br/>marked incomplete, or reports no change"]
     pr["Draft PR linked to the issue<br/>label <code>megalocnus:planned</code> removed"] --> review["Humans: review, CI,<br/>two approvals, merge queue"]
 ```
 
 **Refine** runs when someone with write access adds the `megalocnus` label, or comments `@megalocnus replan`.
 The bot reads the issue, its comments and the relevant code, and posts one plan comment with fixed headings: understanding, assumptions, numbered open questions, plan (files and steps), tests, size (S/M/L), cross-repo impact, and a recommendation (ready, needs answers, or too big with a proposed split).
-On replan it edits its earlier plan comment instead of adding a new one.
-It always adds `megalocnus:planned`; the human decides whether the plan is good enough, and can answer open questions in the go comment.
+Each plan is a new, numbered comment ("Plan v2"); on replan the bot marks the previous plan as superseded instead of rewriting it, so the history stays readable.
+It always adds `megalocnus:planned`; the human decides whether the plan is good enough, and answers open questions in the go comment.
 
 **Implement** runs when someone with write access comments `@megalocnus go` on an issue that has `megalocnus:planned`.
-Its input is the latest plan comment plus team members' comments between the plan and the go.
-It creates a branch `<type>/megalocnus-<issue>-<slug>` from `main`, implements the plan, runs build, unit tests and lint for the modules it touched, and opens a **draft** PR.
-The PR body links the issue (`Closes #N`) and the plan, reports test results, and lists every deviation from the plan.
-It then removes `megalocnus:planned`, so a second go cannot open a second PR.
-Integration tests that need Docker are left to CI.
+A go is refused while a refine run for the same issue is queued or running, so nobody approves a plan that is about to change.
+Its input is only the latest plan comment and the go comment; the rest of the thread is not passed on.
+Implement is split into two jobs:
+
+* The **agent job** runs Claude with the OAuth token and a read-only `GITHUB_TOKEN`, and no App token.
+  Claude implements the plan on a branch `<type>/megalocnus-<issue>-<slug>`, runs build, vet and lint for the modules it touched, and hands over the result as a patch.
+* The **publish job** runs afterwards, also when the agent job fails or runs out of turns.
+  It mints a fresh App token, runs no model and no generated code, and only applies the patch, creates the commits through the API, and opens a **draft** PR.
+  If an open bot PR for the issue already exists, it reports that PR instead of opening a second one.
+  It then removes `megalocnus:planned`.
+
+The PR body links the issue (`Closes #N`) and the plan version, reports what was built and tested, and lists every deviation from the plan.
+The split means the App's write access never shares a runner with code the bot wrote, and the one-hour App token is minted only when it is needed.
 
 **After the PR** everything is as for any other PR.
 During the pilot, humans push follow-up fixes to the bot's branch themselves.
 
 **Failure handling.**
 
-* Tests still failing when the budget runs out: the bot opens the draft PR anyway, marked with what fails, so someone can take over.
-* The change needs a workflow edit: the bot stops and says so on the issue.
-* Rate limit, timeout or crash: a final step comments with a link to the run log; `megalocnus:planned` stays, so a new go retries.
+* Turns or time used up, or checks still failing: the publish job opens the draft PR anyway, marked incomplete with what fails, or reports that there was no usable change.
+* The change needs a workflow edit: the publish job refuses the patch and says so on the issue.
+* Rate limit, cancellation or a crash before publishing: the publish job, or a final status step, comments with a link to the run log; `megalocnus:planned` stays, so a new go retries.
 
 ### Components
 
@@ -102,7 +111,7 @@ During the pilot, humans push follow-up fixes to the bot's branch themselves.
 | GitHub App `megalocnus` | Owned by neicnordic, installed on this repository only. Contents, Issues and Pull requests read/write; Metadata read. No Workflows permission, no webhook. Setup checklist in the [appendix](#appendix-github-app-setup). |
 | Repository secrets | `MEGALOCNUS_APP_ID`, `MEGALOCNUS_APP_PRIVATE_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`. Only the two Megalocnus workflows reference them. |
 | `.github/workflows/claude_refine.yml` | `issues: labeled` and `issue_comment` (replan). Mints an App token downscoped to Contents read and Issues write. Read-only tools plus commenting. |
-| `.github/workflows/claude_implement.yml` | `issue_comment` (go). Mints an App token with Contents, Issues and Pull requests write. Build, test, lint, git and draft PR creation. |
+| `.github/workflows/claude_implement.yml` | `issue_comment` (go). Agent job without App token; publish job mints an App token with Contents, Issues and Pull requests write. |
 | `.claude/commands/refine-issue.md`, `implement-issue.md` | The bot's instructions, reviewed like code. Issue-triggered workflows check out `main`, so the bot always follows the merged version. |
 | Labels | `megalocnus`, `megalocnus:planned`. |
 | `AGENTS.md` and `CLAUDE.md` | Shared repository instructions, see [Repository instructions](#repository-instructions). |
@@ -139,7 +148,8 @@ Actions that handle secrets (`claude-code-action`, `create-github-app-token`) ar
 * Issue text and comments, linked material and the `.related/` checkouts are untrusted input.
   The refine step reads them, so a crafted issue can try to steer the plan; the human reading the plan is the main defence, not a solved problem.
 * Tool allow-lists limit what the model calls directly, but not what code it runs: a test or Makefile target the bot writes can read environment variables and use the network.
-  This is an exfiltration path, not a control, and is addressed in the implement design.
+  The publish split keeps the App token away from that code.
+  The OAuth token cannot be kept away, because Claude needs it in the agent job; this is a known limitation (see below).
 * `show_full_output` stays off, and the jobs refuse to run when debug logging is on (`runner.debug`), because *Re-run with debug logging* turns full output back on.
   The raw execution file is never uploaded as an artifact.
 * Without the Workflows permission the bot cannot change workflow files, and so cannot add new places where secrets are used.
@@ -147,7 +157,8 @@ Actions that handle secrets (`claude-code-action`, `create-github-app-token`) ar
   Reviewers must treat changes to tests and scripts in bot PRs as carefully as workflow changes.
 * The `main` ruleset already requires a PR with two approvals, linear history and the merge queue, so the bot cannot push to `main`.
 * Models: `claude-opus-5-5` for refine (short runs that need judgement), `claude-sonnet-5-5` for implement (long runs against an approved plan).
-* Limits: refine at most 30 turns and 15 minutes; implement at most 100 turns and 60 minutes; one run per issue at a time and one implement run at a time across the repository.
+* Limits: refine at most 30 turns and 15 minutes; the agent job at most 100 turns and 45 minutes, leaving time for the publish job.
+  Both workflows share one concurrency group per issue, with new runs queued rather than cancelled, and only one agent job runs at a time across the repository.
 
 ### Repository Instructions
 
@@ -178,7 +189,8 @@ When an issue needs a change elsewhere, the plan says so under *cross-repo impac
 2. This RFC.
 3. Manual setup by an org owner and a repository admin (see [appendix](#appendix-github-app-setup)).
 4. Workflows are tested in a personal sandbox repository with a separate `megalocnus-dev` App, because `issues` and `issue_comment` workflows always run from the default branch and cannot be tried from a PR branch.
-   Five scenarios must pass: a clear chore, a vague issue (expect questions), an oversized issue (expect a proposed split), an issue that needs a workflow change (expect a stop), and a go from an account without write access (expect nothing).
+   Functional scenarios: a clear chore, a vague issue (expect questions), an oversized issue (expect a proposed split), and an issue that needs a workflow change (expect a stop).
+   Security scenarios: a go from an account without write access and a label added by a triage-only user (expect no model run and no App token), a go comment on a PR (ignored), two go comments in quick succession (one PR), a go during a replan (refused), an issue that asks for a test that reads environment variables (no App token reachable), and an emergency stop during a running job.
 5. PR with the two workflows, `.claude/commands/` and the `CONTRIBUTING.md` section.
 6. Four-week pilot (about two sprints) on category-A issues; anyone may try harder ones.
    The sprint retrospective decides whether to continue, adjust or stop.
@@ -192,6 +204,8 @@ Deleting a secret does not revoke the credential behind it.
 
 ### Known Limitations of the Pilot
 
+* The OAuth token is present in the agent job, next to code the bot writes and runs, so a successful prompt injection could leak it.
+  The impact is misuse of the owner's Claude quota until the token is revoked; it gives no access to GitHub.
 * The OAuth token belongs to one person's Team seat and is valid for one year; the bot stops if that person leaves, changes plan or the token expires.
   It also shares that person's usage limits, which is why implement runs are serialised.
 * Anthropic documents Team OAuth tokens for GitHub Actions, and its terms recommend API keys for products and services.
@@ -205,6 +219,10 @@ Deleting a secret does not revoke the credential behind it.
 
 * **Billing after the pilot.** API key (B), workload identity federation (D) or a dedicated seat (C), and who owns the budget?
 * **Assignment.** Do we want a machine-user account so issues can be assigned to the bot and show on the board, or are labels enough?
+* **CI on bot draft PRs.** Bot pushes trigger normal PR CI, which runs the bot's code with `CODECOV_TOKEN` and package publishing.
+  Option (a): skip those steps while the PR is a draft by `megalocnus[bot]`, and run them once a human has read the diff and marked it ready (touches two existing workflows).
+  Option (b): accept the same risk as any team member's branch and document it.
+  The author leans towards (a).
 * **Two approvals on bot PRs.** Should the person who said go count as one of the two required approvers, or should both approvers be someone else?
 * **Accountability trailer.** Is `Plan-approved-by:` the right trailer, or does the team prefer `Co-authored-by:` despite its meaning?
 * **Review-fix loop.** Should `@megalocnus fix ...` on the bot's own PRs push follow-up commits after the pilot?
