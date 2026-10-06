@@ -101,19 +101,21 @@ During the pilot, humans push follow-up fixes to the bot's branch themselves.
 | --- | --- |
 | GitHub App `megalocnus` | Owned by neicnordic, installed on this repository only. Contents, Issues and Pull requests read/write; Metadata read. No Workflows permission, no webhook. Setup checklist in the [appendix](#appendix-github-app-setup). |
 | Repository secrets | `MEGALOCNUS_APP_ID`, `MEGALOCNUS_APP_PRIVATE_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`. Only the two Megalocnus workflows reference them. |
-| `.github/workflows/claude_refine.yml` | `issues: labeled` and `issue_comment` (replan). `contents: read`, `issues: write`. Read-only tools plus commenting. |
-| `.github/workflows/claude_implement.yml` | `issue_comment` (go). `contents: write`, `pull-requests: write`. Build, test, lint, git and `gh pr create --draft`. |
-| `.claude/commands/refine-issue.md`, `implement-issue.md` | The bot's instructions, reviewed like code. `claude-code-action` restores `.claude/` and `CLAUDE.md` from the base branch before running, so a PR cannot rewrite them. |
+| `.github/workflows/claude_refine.yml` | `issues: labeled` and `issue_comment` (replan). Mints an App token downscoped to Contents read and Issues write. Read-only tools plus commenting. |
+| `.github/workflows/claude_implement.yml` | `issue_comment` (go). Mints an App token with Contents, Issues and Pull requests write. Build, test, lint, git and draft PR creation. |
+| `.claude/commands/refine-issue.md`, `implement-issue.md` | The bot's instructions, reviewed like code. Issue-triggered workflows check out `main`, so the bot always follows the merged version. |
 | Labels | `megalocnus`, `megalocnus:planned`. |
 | `AGENTS.md` and `CLAUDE.md` | Shared repository instructions, see [Repository instructions](#repository-instructions). |
 
 All jobs run on `ubuntu-latest`.
-Both workflows check at job level that the event is on an issue, not a PR, and that the comment contains the trigger phrase, so stray comments do not start runners.
+Both workflows use `claude-code-action` in automation mode with an explicit prompt, and do their own trigger checks at job level before any token is minted: label events check the label name; comment events require `types: [created]`, an issue rather than a PR, and a comment that starts with the command.
+Workflow `permissions:` only govern `GITHUB_TOKEN`, so the App token is downscoped explicitly when it is minted with `actions/create-github-app-token`.
+Actions that handle secrets (`claude-code-action`, `create-github-app-token`) are pinned to full commit SHAs; Dependabot still updates them.
 
 ### Identity and Transparency
 
-* Commits are authored by `megalocnus[bot]` and signed through the GitHub API (`use_commit_signing`), so they show as *Verified* during review.
-  Rebasing via *Update branch* or the merge queue keeps the bot as author but drops the signature, as it does for every rebased commit.
+* Commits are authored by `megalocnus[bot]` and created through the GitHub API with the App token, so they show as *Verified* during review.
+  GitHub's rebase merge creates replacement commits without signature verification; the bot stays the author.
 * Commit messages follow Conventional Commits (ADR-0007) and carry two trailers:
 
   ```text
@@ -122,23 +124,27 @@ Both workflows check at job level that the event is on an issue, not a PR, and t
   ```
 
   We deliberately do not use `Co-authored-by` for the approver: GitHub would then show them as co-author of code they did not write.
-* Every PR and plan comment ends with a footer such as:
+* Every PR ends with a footer such as:
 
   > 🦥 Written by **Megalocnus**, Claude (`claude-sonnet-5-5`) via claude-code-action. Plan approved by @handle in #123. Run log: (link). A human reviews every change before merge.
 
-  The model id is filled in by the workflow.
+  Plan comments end with a similar footer that names the requester and says the plan is awaiting approval (`@megalocnus go`).
+  The model id and the approver are filled in by the workflow, not written by the model.
 * The App profile has a sloth avatar and the description *"Claude (Anthropic) coding agent for the SDA team. Acts only on requests from team members; every PR is human-reviewed."*
 * `CONTRIBUTING.md` gets a short section on how to use Megalocnus and the team's policy for AI-written code.
 
 ### Security and Cost
 
 * Only users with write access can trigger the bot (the action's default); `allowed_non_write_users` and `allowed_bots` stay empty.
-* The implement step filters thread comments on GitHub's `author_association` field (OWNER, MEMBER, COLLABORATOR) before they reach the model.
-  The issue body may come from an outsider; it is background only, the human-read plan is the contract.
-* Tools are allow-listed per workflow; there is no `curl` or `wget`.
-  `show_full_output` stays off, so run logs do not contain the full transcript.
-* Without the Workflows permission GitHub rejects any push that touches `.github/workflows/`.
-  Secrets are only exposed to jobs whose workflow file names them, so the bot cannot reach its own token or App key by editing a Makefile or a test.
+* Issue text and comments, linked material and the `.related/` checkouts are untrusted input.
+  The refine step reads them, so a crafted issue can try to steer the plan; the human reading the plan is the main defence, not a solved problem.
+* Tool allow-lists limit what the model calls directly, but not what code it runs: a test or Makefile target the bot writes can read environment variables and use the network.
+  This is an exfiltration path, not a control, and is addressed in the implement design.
+* `show_full_output` stays off, and the jobs refuse to run when debug logging is on (`runner.debug`), because *Re-run with debug logging* turns full output back on.
+  The raw execution file is never uploaded as an artifact.
+* Without the Workflows permission the bot cannot change workflow files, and so cannot add new places where secrets are used.
+  It can still change tests, scripts and Dockerfiles, and its pushes trigger normal PR CI, which runs that code with the secrets any same-repository branch gets (for example `CODECOV_TOKEN` and package publishing in the image job).
+  Reviewers must treat changes to tests and scripts in bot PRs as carefully as workflow changes.
 * The `main` ruleset already requires a PR with two approvals, linear history and the merge queue, so the bot cannot push to `main`.
 * Models: `claude-opus-5-5` for refine (short runs that need judgement), `claude-sonnet-5-5` for implement (long runs against an approved plan).
 * Limits: refine at most 30 turns and 15 minutes; implement at most 100 turns and 60 minutes; one run per issue at a time and one implement run at a time across the repository.
@@ -177,7 +183,10 @@ When an issue needs a change elsewhere, the plan says so under *cross-repo impac
 6. Four-week pilot (about two sprints) on category-A issues; anyone may try harder ones.
    The sprint retrospective decides whether to continue, adjust or stop.
 
-**Kill switch:** disable the two workflows in the Actions tab, or delete `CLAUDE_CODE_OAUTH_TOKEN`.
+**Pause:** disable the two workflows in the Actions tab; this stops new runs only.
+
+**Emergency stop:** additionally cancel active and queued runs, suspend the App installation, and revoke the OAuth token in the owner's Claude account.
+Deleting a secret does not revoke the credential behind it.
 
 **Pilot measurements:** issues handled, share of PRs merged, review rounds per PR, how often a replan was needed, quota used, and incidents.
 
@@ -185,7 +194,9 @@ When an issue needs a change elsewhere, the plan says so under *cross-repo impac
 
 * The OAuth token belongs to one person's Team seat and is valid for one year; the bot stops if that person leaves, changes plan or the token expires.
   It also shares that person's usage limits, which is why implement runs are serialised.
-* Anthropic's terms describe subscription OAuth as intended for "ordinary use of Claude Code" and recommend API keys for products; a shared team bot on one seat is a grey area, acceptable for a short pilot but not as a permanent setup.
+* Anthropic documents Team OAuth tokens for GitHub Actions, and its terms recommend API keys for products and services.
+  Whether a shared team bot may run on one named member's seat is unconfirmed, and the length of the pilot does not change that; we should get confirmation for our plan before starting, or use Console-funded authentication.
+* If the Team plan has extra usage (usage credits) enabled, bot runs beyond the seat's limits become billable; the setting should be checked before the pilot.
 * The bot cannot take CI or workflow issues.
 * Fork PRs are out of reach: secrets are withheld and the App cannot push to forks.
 * No automated second-model review; reviewers may run one locally (for example Codex).
@@ -198,7 +209,7 @@ When an issue needs a change elsewhere, the plan says so under *cross-repo impac
 * **Accountability trailer.** Is `Plan-approved-by:` the right trailer, or does the team prefer `Co-authored-by:` despite its meaning?
 * **Review-fix loop.** Should `@megalocnus fix ...` on the bot's own PRs push follow-up commits after the pilot?
 * **Second-model review in CI.** Is an automated review by another model (for example Codex) worth the extra cost and setup?
-* **Workflows permission.** If secrets move to an Environment restricted to `main`, do we then grant the Workflows permission so the bot can take CI chores?
+* **Workflows permission.** Is there a setup that would make it safe enough to let the bot take CI chores?
 * **Scope.** Which issues count as category A, and do we want a rule for what the bot should not touch (for example database migrations or crypto code)?
 * **Ruleset.** The `main` ruleset has `require_extra_approval_for_unattributed_changes` enabled; we should confirm how that interacts with bot-authored commits.
 
@@ -286,13 +297,15 @@ When an issue needs a change elsewhere, the plan says so under *cross-repo impac
 
 #### No Workflows permission
 
-* Good, because a hijacked bot cannot push a workflow that exfiltrates secrets, and cannot weaken the checks that judge its own PRs.
+* Good, because a hijacked bot cannot add a workflow that names the bot's own secrets, or delete or rewrite existing CI jobs.
+* Neutral, because it can still change the tests and scripts that existing CI runs (see [Security and Cost](#security-and-cost)).
 * Bad, because CI and workflow issues stay with humans.
 
 #### Workflows permission
 
 * Good, because the bot could take CI chores.
-* Bad, because it opens the exfiltration path above unless secrets are moved to an Environment restricted to `main`, which is configuration someone has to keep right.
+* Bad, because a hijacked bot could add a workflow that uses any repository secret.
+  Moving the bot's secrets to an Environment restricted to `main` narrows this, but is configuration someone has to keep right, and does not cover other secrets.
 
 ## Appendix: GitHub App Setup
 
