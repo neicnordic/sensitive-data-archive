@@ -68,7 +68,8 @@ flowchart TD
     plan["Plan comment<br/>+ label <code>megalocnus:planned</code>"] --> human{"Human reads the plan"}
     human -- "needs changes" --> replan
     human -- "<code>@megalocnus go</code>" --> agent
-    agent["<b>Agent job</b><br/>Claude writes the change<br/>OAuth token only, no write access"] -- "patch" --> publish
+    agent["<b>Agent job</b><br/>Claude writes the change<br/>OAuth token only, no write access"] -- "patch" --> test
+    test["<b>Test job</b><br/>no secrets: go test incl. Docker, lint"] -- "patch + results" --> publish
     publish["<b>Publish job</b><br/>fresh App token, no model, no generated code<br/>commit, branch, draft PR"] --> pr
     agent -. "needs a workflow change" .-> stop["Publish job comments on the issue"]
     agent -. "turns or time used up" .-> partial["Publish job opens the draft PR<br/>marked incomplete, or reports no change"]
@@ -83,16 +84,22 @@ It always adds `megalocnus:planned`; the human decides whether the plan is good 
 **Implement** runs when someone with write access comments `@megalocnus go` on an issue that has `megalocnus:planned`.
 A go is refused while a refine run for the same issue is queued or running, so nobody approves a plan that is about to change.
 Its input is only the latest plan comment and the go comment; the rest of the thread is not passed on.
-Implement is split into two jobs:
+Implement is split into three jobs:
 
 * The **agent job** runs Claude with the OAuth token and a read-only `GITHUB_TOKEN`, and no App token.
   Claude implements the plan on a branch `<type>/megalocnus-<issue>-<slug>`, runs build, vet and lint for the modules it touched, and hands over the result as a patch.
-* The **publish job** runs afterwards, also when the agent job fails or runs out of turns.
+  If Claude Code's built-in command sandbox can be shown to hide the OAuth token from child processes and block the network, Claude also runs Docker-free tests there so it can fix its own failures; until that is verified, it does not run tests.
+* The **test job** has no secrets and only a read-only `GITHUB_TOKEN`.
+  It applies the patch and runs `go test` for the touched modules, including the packages that start PostgreSQL or RabbitMQ in Docker, and lint.
+  Nothing in it is worth stealing, so running the bot's code there is safe; the results go to the publish job.
+* The **publish job** runs last, also when the agent or test job fails or the agent runs out of turns.
   It mints a fresh App token, runs no model and no generated code, and only applies the patch, creates the commits through the API, and opens a **draft** PR.
   If an open bot PR for the issue already exists, it reports that PR instead of opening a second one.
   It then removes `megalocnus:planned`.
 
-The PR body links the issue (`Closes #N`) and the plan version, reports what was built and tested, and lists every deviation from the plan.
+The PR body links the issue (`Closes #N`) and the plan version, includes the test job's results, and lists every deviation from the plan.
+Reviewers therefore see test results before the PR is marked ready and the regular, secret-bearing CI runs.
+Claude does not see the test job's results in the same run; an automatic fix round is left for after the pilot.
 The split means the App's write access never shares a runner with code the bot wrote, and the one-hour App token is minted only when it is needed.
 
 **After the PR** everything is as for any other PR.
@@ -111,7 +118,7 @@ During the pilot, humans push follow-up fixes to the bot's branch themselves.
 | GitHub App `megalocnus` | Owned by neicnordic, installed on this repository only. Contents, Issues and Pull requests read/write; Metadata read. No Workflows permission, no webhook. Setup checklist in the [appendix](#appendix-github-app-setup). |
 | Repository secrets | `MEGALOCNUS_APP_ID`, `MEGALOCNUS_APP_PRIVATE_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`. Only the two Megalocnus workflows reference them. |
 | `.github/workflows/claude_refine.yml` | `issues: labeled` and `issue_comment` (replan). Mints an App token downscoped to Contents read and Issues write. Read-only tools plus commenting. |
-| `.github/workflows/claude_implement.yml` | `issue_comment` (go). Agent job without App token; publish job mints an App token with Contents, Issues and Pull requests write. |
+| `.github/workflows/claude_implement.yml` | `issue_comment` (go). Agent job without App token; test job without any secrets; publish job mints an App token with Contents, Issues and Pull requests write. |
 | `.claude/commands/refine-issue.md`, `implement-issue.md` | The bot's instructions, reviewed like code. Issue-triggered workflows check out `main`, so the bot always follows the merged version. |
 | Labels | `megalocnus`, `megalocnus:planned`. |
 | `AGENTS.md` and `CLAUDE.md` | Shared repository instructions, see [Repository instructions](#repository-instructions). |
@@ -157,7 +164,7 @@ Actions that handle secrets (`claude-code-action`, `create-github-app-token`) ar
   Reviewers must treat changes to tests and scripts in bot PRs as carefully as workflow changes.
 * The `main` ruleset already requires a PR with two approvals, linear history and the merge queue, so the bot cannot push to `main`.
 * Models: `claude-opus-5-5` for refine (short runs that need judgement), `claude-sonnet-5-5` for implement (long runs against an approved plan).
-* Limits: refine at most 30 turns and 15 minutes; the agent job at most 100 turns and 45 minutes, leaving time for the publish job.
+* Limits: refine at most 30 turns and 15 minutes; the agent job at most 100 turns and 45 minutes; the test job at most 30 minutes.
   Both workflows share one concurrency group per issue, with new runs queued rather than cancelled, and only one agent job runs at a time across the repository.
 
 ### Repository Instructions
