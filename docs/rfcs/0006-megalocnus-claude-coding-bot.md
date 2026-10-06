@@ -82,23 +82,26 @@ Each plan is a new, numbered comment ("Plan v2"); on replan the bot marks the pr
 It always adds `megalocnus:planned`; the human decides whether the plan is good enough, and answers open questions in the go comment.
 
 **Implement** runs when someone with write access comments `@megalocnus go` on an issue that has `megalocnus:planned`.
+A preflight step checks the commenter's repository permission before any App token is minted or any model starts.
 A go is refused while a refine run for the same issue is queued or running, so nobody approves a plan that is about to change.
-Its input is only the latest plan comment and the go comment; the rest of the thread is not passed on.
+Its input is only the go comment and the latest plan posted *before* it; both are fixed when the run starts and passed unchanged to every job, so a plan posted while the go waited in the queue is never used.
+The rest of the thread is not passed on.
 Implement is split into three jobs:
 
-* The **agent job** runs Claude with the OAuth token and a read-only `GITHUB_TOKEN`, and no App token.
-  Claude implements the plan on a branch `<type>/megalocnus-<issue>-<slug>`, runs build, vet and lint for the modules it touched, and hands over the result as a patch.
-  If Claude Code's built-in command sandbox can be shown to hide the OAuth token from child processes and block the network, Claude also runs Docker-free tests there so it can fix its own failures; until that is verified, it does not run tests.
-* The **test job** has no secrets and only a read-only `GITHUB_TOKEN`.
-  It applies the patch and runs `go test` for the touched modules, including the packages that start PostgreSQL or RabbitMQ in Docker, and lint.
-  Nothing in it is worth stealing, so running the bot's code there is safe; the results go to the publish job.
+* The **agent job** runs Claude with the OAuth token, and passes the read-only `GITHUB_TOKEN` to the action explicitly so that it never falls back to App authentication.
+  Claude implements the plan against a recorded base commit of `main` and hands over the result as one patch artifact.
+  Go commands can execute code (tests, but also `-toolexec` and `-vettool`), so the agent job runs no build, vet, lint or test commands by default.
+  If Claude Code's command sandbox can be configured and shown to hide the OAuth token from child processes and block the network, Claude may run Docker-free checks there to fix its own mistakes.
+* The **test job** has no repository secrets, only a read-only `GITHUB_TOKEN`, and no shared writable caches.
+  It applies the patch to the same base commit and runs build, vet, `go test` (including the packages that start PostgreSQL or RabbitMQ in Docker) and lint for the touched modules.
+  The bot's code may tamper with anything in this job, so only a short, bounded result summary is passed on; the publish job never uses files from it.
 * The **publish job** runs last, also when the agent or test job fails or the agent runs out of turns.
-  It mints a fresh App token, runs no model and no generated code, and only applies the patch, creates the commits through the API, and opens a **draft** PR.
+  It uses the original agent artifact, checks it before minting a fresh App token, runs no model and no generated code, and only applies the patch, creates the commits through the API, and opens a **draft** PR.
   If an open bot PR for the issue already exists, it reports that PR instead of opening a second one.
   It then removes `megalocnus:planned`.
 
 The PR body links the issue (`Closes #N`) and the plan version, includes the test job's results, and lists every deviation from the plan.
-Reviewers therefore see test results before the PR is marked ready and the regular, secret-bearing CI runs.
+Reviewers therefore see test results early; if the team chooses option (a) under [Open Questions](#open-questions), they see them before the regular, secret-bearing CI runs.
 Claude does not see the test job's results in the same run; an automatic fix round is left for after the pilot.
 The split means the App's write access never shares a runner with code the bot wrote, and the one-hour App token is minted only when it is needed.
 
@@ -209,6 +212,19 @@ Deleting a secret does not revoke the credential behind it.
 
 **Pilot measurements:** issues handled, share of PRs merged, review rounds per PR, how often a replan was needed, quota used, and incidents.
 
+### Prerequisites Before Activation
+
+These are implementation requirements, recorded here so the implementation plan cannot drop them:
+
+* **Artifact contract:** one base SHA for all three jobs; a complete patch including new and deleted files; one immutable agent artifact consumed by both later jobs; the agent job reserves time to upload it; a missing artifact or digest mismatch fails closed.
+* **Publisher boundary:** the publish logic comes from `main`, outside the patched tree, and the patch is validated before the App token is minted: no paths under `.github/` or `.claude/`, no `CLAUDE.md` or `AGENTS.md` changes unless the issue is about them, no path traversal, symlinks or submodules.
+* **Authorization preflight:** every trigger checks the actor's repository permission with a read-only token before minting App tokens or starting a model.
+* **Concurrency:** queued runs use `cancel-in-progress: false`; queue order follows waiting time, not comment time, which is why the plan selection above is fixed at run start.
+* **Related checkouts:** record the commit SHA of each `.related/` checkout in the plan and reuse it in implement; never run scripts or load configuration from them.
+* **Tests:** an explicit mapping from touched paths to Go modules, packages and build tags (for example the `visas` variant CI runs), measured against the time limits.
+* **Logging:** claude-code-action v1 prints the automation prompt in the run log, so prompts must not contain anything that is not already public.
+* **Cancellation:** a hard cancel can skip the final steps; a separate status step or workflow reports runs that ended without publishing.
+
 ### Known Limitations of the Pilot
 
 * The OAuth token is present in the agent job, next to code the bot writes and runs, so a successful prompt injection could leak it.
@@ -227,7 +243,7 @@ Deleting a secret does not revoke the credential behind it.
 * **Billing after the pilot.** API key (B), workload identity federation (D) or a dedicated seat (C), and who owns the budget?
 * **Assignment.** Do we want a machine-user account so issues can be assigned to the bot and show on the board, or are labels enough?
 * **CI on bot draft PRs.** Bot pushes trigger normal PR CI, which runs the bot's code with `CODECOV_TOKEN` and package publishing.
-  Option (a): skip those steps while the PR is a draft by `megalocnus[bot]`, and run them once a human has read the diff and marked it ready (touches two existing workflows).
+  Option (a): skip those steps while the PR is a draft by `megalocnus[bot]`, and run them once a human has read the diff and marked it ready (touches two existing workflows, which also need the `ready_for_review` event added).
   Option (b): accept the same risk as any team member's branch and document it.
   The author leans towards (a).
 * **Two approvals on bot PRs.** Should the person who said go count as one of the two required approvers, or should both approvers be someone else?
