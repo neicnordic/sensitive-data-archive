@@ -84,9 +84,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               name: {{ .Values.global.networkPolicy.observabilityNamespace }}
-          podSelector:
-            matchLabels:
-              {{ .Values.global.networkPolicy.ingressLabelMatch | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
