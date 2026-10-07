@@ -432,9 +432,11 @@ func main() {
 		os.Exit(1)
 	}
 	defer func() {
-		if err := shutdown(context.Background()); err != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(shutdownCtx); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
+		shutdownCancel()
 	}()
 	ctx, startupSpan := observability.StartSpan(ctx, "start up")
 	defer startupSpan.End()

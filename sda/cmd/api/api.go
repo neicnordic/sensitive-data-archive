@@ -68,9 +68,11 @@ func run() error {
 		return fmt.Errorf("failed to setup OTel SDK: %v", err)
 	}
 	defer func() {
-		if err := shutdown(ctx); err != nil {
+		otelShutdownCtx, otelShutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(otelShutdownCtx); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
+		otelShutdownCancel()
 	}()
 
 	ctx, startupSpan := observability.StartSpan(ctx, "start up")
