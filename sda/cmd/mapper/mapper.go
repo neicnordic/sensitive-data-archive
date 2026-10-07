@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	mapperconf "github.com/neicnordic/sensitive-data-archive/cmd/mapper/config"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
@@ -54,9 +55,11 @@ func run() error {
 		return fmt.Errorf("failed to setup OTel SDK: %v", err)
 	}
 	defer func() {
-		if err := shutdown(ctx); err != nil {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(shutdownCtx); err != nil {
 			slog.Error("failed to shutdown OTel SDK", "err", err)
 		}
+		shutdownCancel()
 	}()
 
 	ctx, startupSpan := observability.StartSpan(ctx, "start up")
