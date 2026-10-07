@@ -93,6 +93,7 @@ global:
     internalNamespace: ""
     ingressNamespace: ""
     ingressLabelMatch: ""
+    observabilityNamespace: ""
 
 ## RevisionHistory
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
