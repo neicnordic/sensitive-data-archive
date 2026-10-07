@@ -143,7 +143,7 @@ WithStatsHandler option during server creation.
 Example:
 
 ```go
-s := grpc.NewServer(append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler())))
+s := grpc.NewServer(append(opts, grpc.StatsHandler(otelgrpc.NewServerHandler()))...)
 ```
 
 This is just one way, depending on the server how to instrument it might need to change.
@@ -307,9 +307,8 @@ var thingsOccurredCounter metric.Int64Counter
 func main(){
     // observability setup
 
-    appMeter, err := observability.NewMeter("APPLICATION_NAME")
-    // error handling 
-
+    appMeter := observability.NewMeter("APPLICATION_NAME")
+    
     thingsOccurredCounter, err = appMeter.Int64Counter("things_occurred")
     // error handling
 
@@ -326,7 +325,7 @@ func main(){
     // ...
     for msg := range msgChan {
         func () {
-            thingsOccurredCounter.Add(1)
+            thingsOccurredCounter.Add(ctx, 1)
             thingsOccurring++
 
             defer func (){
