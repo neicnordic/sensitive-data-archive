@@ -216,6 +216,40 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 | `global.download.trusted.iss`                    | Array of trusted OIDC endpoints                                                                                                                                                                          | ``                                              |
 | `global.download.trusted.iss[iss]`               | URI to the OIDC service                                                                                                                                                                                  | `https://proxy.aai.lifescience-ri.eu`           |
 | `global.download.trusted.iss[jku]`               | The URI to the OIDCs jwk endpoint                                                                                                                                                                        | `https://proxy.aai.lifescience-ri.eu/OIDC/jwks` |
+| `global.downloadV2.enabled`                      | enable the v2 download service (opt-in during migration)                                                                                                                                                 | `false`                                         |
+| `global.downloadV2.service.id`                   | GA4GH service-info identifier (reverse domain notation)                                                                                                                                                  | `"neicnordic.sda.download"`                     |
+| `global.downloadV2.service.orgName`              | organization name for GA4GH service-info                                                                                                                                                                 | `""`                                            |
+| `global.downloadV2.service.orgURL`               | organization URL for GA4GH service-info                                                                                                                                                                  | `""`                                            |
+| `global.downloadV2.jwt.pubkeyURL`                | URL to JWKS endpoint for JWT verification (alternative to mounting keys via global.oidc.jwtSecret)                                                                                                       | `""`                                            |
+| `global.downloadV2.jwt.allowAllData`             | allow all authenticated users access to all datasets (testing only)                                                                                                                                      | `false`                                         |
+| `global.downloadV2.session.expiration`           | session expiration time in seconds                                                                                                                                                                       | `3600`                                          |
+| `global.downloadV2.session.domain`               | cookie domain, defaults to ingress hostname if empty                                                                                                                                                     | `""`                                            |
+| `global.downloadV2.session.secure`               | use secure cookies (HTTPS only)                                                                                                                                                                          | `true`                                          |
+| `global.downloadV2.session.httpOnly`             | HTTP-only cookies (not accessible via JavaScript)                                                                                                                                                        | `true`                                          |
+| `global.downloadV2.session.name`                 | session cookie name                                                                                                                                                                                      | `"sda_session"`                                 |
+| `global.downloadV2.permission.model`             | permission model: ownership, visa, or combined                                                                                                                                                           | `"combined"`                                    |
+| `global.downloadV2.auth.allowOpaque`             | allow userinfo-based auth for opaque (non-JWT) tokens                                                                                                                                                    | `true`                                          |
+| `global.downloadV2.visa.enabled`                 | enable GA4GH visa support for dataset access                                                                                                                                                             | `false`                                         |
+| `global.downloadV2.visa.source`                  | visa source: userinfo (GA4GH compliant) or token (legacy)                                                                                                                                                | `"userinfo"`                                    |
+| `global.downloadV2.visa.userinfoURL`             | userinfo endpoint URL, auto-discovered from global.oidc.provider if empty                                                                                                                                | `""`                                            |
+| `global.downloadV2.visa.trustedIssuers`          | list of trusted issuer+JKU pairs [{iss: "", jku: ""}]                                                                                                                                                    | `[]`                                            |
+| `global.downloadV2.visa.datasetIdMode`           | dataset ID extraction: raw (exact visa value) or suffix (last URL/URN segment)                                                                                                                           | `"raw"`                                         |
+| `global.downloadV2.visa.identityMode`            | identity binding: broker-bound, strict-sub, or strict-iss-sub                                                                                                                                            | `"broker-bound"`                                |
+| `global.downloadV2.visa.validateAsserted`        | reject visas where asserted timestamp is in the future                                                                                                                                                   | `true`                                          |
+| `global.downloadV2.visa.allowInsecureJku`        | allow HTTP (non-TLS) JKU URLs in trusted issuers (testing only)                                                                                                                                          | `false`                                         |
+| `global.downloadV2.visa.cache.tokenTTL`          | token-keyed cache TTL in seconds                                                                                                                                                                         | `3600`                                          |
+| `global.downloadV2.visa.cache.jwkTTL`            | JWK cache TTL in seconds                                                                                                                                                                                 | `300`                                           |
+| `global.downloadV2.visa.cache.validationTTL`     | visa validation cache TTL in seconds                                                                                                                                                                     | `120`                                           |
+| `global.downloadV2.visa.cache.userinfoTTL`       | userinfo cache TTL in seconds                                                                                                                                                                            | `60`                                            |
+| `global.downloadV2.visa.limits.maxVisas`         | maximum visas to process per passport                                                                                                                                                                    | `200`                                           |
+| `global.downloadV2.visa.limits.maxJwksPerRequest`| maximum distinct JKU fetches per request                                                                                                                                                                 | `10`                                            |
+| `global.downloadV2.visa.limits.maxVisaSize`      | maximum visa JWT size in bytes                                                                                                                                                                           | `16384`                                         |
+| `global.downloadV2.cache.enabled`                | enable database query caching                                                                                                                                                                            | `true`                                          |
+| `global.downloadV2.cache.fileTTL`                | file query cache TTL in seconds                                                                                                                                                                          | `300`                                           |
+| `global.downloadV2.cache.permissionTTL`          | permission check cache TTL in seconds                                                                                                                                                                    | `120`                                           |
+| `global.downloadV2.cache.datasetTTL`             | dataset query cache TTL in seconds                                                                                                                                                                       | `300`                                           |
+| `global.downloadV2.pagination.hmacSecret`        | HMAC key for page tokens. Required when `downloadV2.replicaCount` > 1 and when `global.environment` is `production`; must be the same on every replica. See [Secrets](#secrets)                          | `""`                                            |
+| `global.downloadV2.audit.required`               | require a real audit logger (fail startup if noop would be used)                                                                                                                                         | `false`                                         |
 | `global.oidc.provider`                           | URL to the OIDc service.                                                                                                                                                                                 | `"https://proxy.aai.lifescience-ri.eu"`         |
 | `global.oidc.jwkPath`                            | Public key path on the OIDC host.                                                                                                                                                                        | `/OIDC/jwks`                                    |
 | `global.oidc.id`                                 | User ID to the OIDC host.                                                                                                                                                                                | ``                                              |
@@ -248,6 +282,96 @@ The following table lists the configurable parameters of the `sda-svc` chart and
 | `global.tls.clusterIssuer`                       | ClusterIssuer for TLS certificate creation.                                                                                                                                                              | `""`                                            |
 | `global.reencrypt.host`                          | gRPC host for reencryption                                                                                                                                                                               | `""`                                            |
 | `global.reencrypt.port`                          | port number of the gRPC host for reencryption                                                                                                                                                            | `"50051"`                                       |
+
+### Secrets
+
+The chart needs a number of secret values: database and broker passwords, the OIDC client secret, S3 access keys, the
+crypt4gh keys and their passphrase, the CEGA, sync API and sync remote passwords, and the download v2 pagination key.
+There are two ways to supply them.
+
+#### Values rendered by the chart (default, `global.vaultSecrets: false`)
+
+The secret values are set in the values file like any other parameter, and the chart renders them into Kubernetes
+Secrets: one Secret with the service configuration per service, named `<fullname>-<service>` where `<fullname>` is
+`<release>-sda-svc` unless the release name already contains the chart name, or `nameOverride` or `fullnameOverride`
+say otherwise, plus shared Secrets for the S3 backends and, when `global.c4gh.publicKeyData` and
+`global.c4gh.privateKeys[].keyData` are given, the crypt4gh key Secret named by `global.c4gh.secretName`. Both inbox
+variants use the suffix `inbox`. Two values skip the Secret and land in the pod spec as plain environment values: the
+migration jobs' `global.db.admin.password` unless `global.db.admin.secretName` names a Secret to read it from, and the
+Java keystore passwords `doa.keystorePass` and `sftpInbox.keystorePass`.
+
+A values file that carries these values therefore holds plaintext secrets and must be protected. The usual way is to
+keep the secret values in a second values file that is encrypted at rest with [sops](https://github.com/getsops/sops)
+and decrypted at deploy time, either by the [helm secrets](https://github.com/jkroepke/helm-secrets) plugin or by Flux
+or Argo CD through their sops support. Helm merges the files, so the plaintext `values.yaml` never contains a secret.
+Example `secrets.yaml` before encryption:
+
+```yaml
+global:
+  db:
+    password: "..."
+  broker:
+    password: "..."
+  oidc:
+    secret: "..."
+  downloadV2:
+    pagination:
+      hmacSecret: "..."
+credentials:
+  api:
+    dbPassword: "..."
+    mqPassword: "..."
+```
+
+```sh
+sops --encrypt --in-place secrets.yaml
+helm secrets upgrade --install sda ./charts/sda-svc -f values.yaml -f secrets.yaml
+```
+
+The values that hold secrets in this mode:
+
+| Values                                                                                                                            | Used by                                                   |
+|-----------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------|
+| `global.db.password`, `global.db.admin.password`                                                                                  | every service with database access, migration jobs        |
+| `global.broker.password`                                                                                                          | every service with broker access                          |
+| `credentials.<service>.dbPassword`, `credentials.<service>.mqPassword`                                                            | per-service credentials when the shared ones are not used |
+| `global.oidc.secret`                                                                                                              | auth                                                      |
+| `global.cega.password`                                                                                                            | auth, sftp-inbox                                          |
+| `global.c4gh.publicKeyData`, `global.c4gh.privateKeys[].keyData`, `global.c4gh.privateKeys[].passphrase`                          | ingest, verify, reencrypt, sync, doa                      |
+| `global.download.serveDecrypted.passphrase`                                                                                       | download v1, when serving decrypted files                 |
+| `global.archive.s3[].accessKey` / `secretKey`, `global.backupArchive.s3[]`, `global.inbox.s3[]`, `global.sync.destination.s3[]` | storage backends                                          |
+| `global.s3Inbox.accessKey` / `secretKey`, `global.doa.outbox.s3AccessKey` / `s3SecretKey`                                         | s3inbox, doa                                              |
+| `global.sync.api.password`, `global.sync.remote.password`                                                                         | syncapi, sync                                             |
+| `doa.keystorePass`, `sftpInbox.keystorePass`                                                                                      | doa, sftp-inbox, as plain environment values              |
+| `global.downloadV2.pagination.hmacSecret`                                                                                         | download v2, every replica                                |
+
+Parameters named `*.secretName`, `*.jwtSecret` and `global.oidc.jwtSecret` name Secrets you create beforehand. The
+keys inside those Secrets never go in the values file. `global.c4gh.secretName` is the one exception: the chart creates
+that Secret itself when the key data is in values, as described above, and otherwise expects it to exist.
+
+The download v2 pagination key signs the page tokens that the file listing hands out. Every replica must verify tokens
+another replica issued, so the chart refuses to render when `downloadV2.replicaCount` is more than one and the key is
+empty, and the service refuses to start in `production` without it. Any random string works, `openssl rand -hex 32`
+is enough. You can rotate the key at any time; outstanding page tokens become invalid and nothing else changes.
+
+#### Secrets managed outside the chart (`global.vaultSecrets: true`)
+
+The chart renders no configuration Secrets and does not mount a configuration file. An external secrets manager, such
+as HashiCorp Vault Agent, puts each service's configuration file (`global.confFile`, by default `config.yaml`) and its
+crypt4gh and JWT files under `global.secretsPath`, at the sub paths given by `global.confFilePath`, `global.c4ghPath`
+and `global.jwtPath`. Each configuration file holds what the corresponding `templates/<service>-secrets.yaml` would have
+rendered, so those templates are the reference for the keys each service reads. For download v2 that includes
+`pagination.hmac-secret`, which must be identical in every replica's file, and, when visas are enabled, the trusted
+issuer file `iss.json` under `global.download.trusted.configPath`.
+
+The mode is not applied uniformly across the templates, so check the deployment template of every service you enable.
+What stays with the chart: TLS certificates are still mounted from Kubernetes Secrets in most services unless
+`global.pkiService` is set, in which case the Go services expect the files under `global.tlsPath` while DOA and the
+SFTP inbox use their own `tls.*` file parameters under `global.secretsPath`. DOA sources an environment file,
+`global.doa.envFile` under `global.secretsPath`, instead of a configuration file, but its S3 outbox credentials are
+still read from the `<fullname>-doa` Secret. The SFTP inbox takes its broker and CEGA credentials from the
+`<fullname>-inbox` Secret, which the chart renders in both modes. rotatekey still mounts its `<fullname>-rotatekey`
+configuration Secret although the chart no longer renders it.
 
 ### Credentials
 
