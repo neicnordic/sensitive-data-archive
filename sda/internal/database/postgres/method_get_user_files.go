@@ -14,28 +14,24 @@ import (
 const getUserFilesQuery = "getUserFiles"
 
 func init() {
+	// The path prefix is matched as the byte range [prefix, prefix || U+10FFFF) in the C
+	// collation, so it is served by files_submission_user_submission_file_path_c_idx instead
+	// of filtering every file of the user. An empty prefix matches all paths.
 	queries[getUserFilesQuery] = `SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
- WHERE f.submission_user = $1 
-    AND ($2::TEXT IS NULL OR substr(f.submission_file_path, 1, $3) = $2::TEXT)
+ WHERE f.submission_user = $1
+	AND f.submission_file_path COLLATE "C" >= $2::TEXT
+	AND f.submission_file_path COLLATE "C" < $2::TEXT || chr(1114111)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
-	AND ($4::UUID IS NULL OR f.id > $4::UUID)
-ORDER BY f.id ASC LIMIT $5;`
+	AND ($3::UUID IS NULL OR f.id > $3::UUID)
+ORDER BY f.id ASC LIMIT $4;`
 }
 
 func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix string, allData bool, limit int, cursor string) ([]*database.SubmissionFileInfo, string, error) {
 	stmt, err := db.getPreparedStmt(tx, getUserFilesQuery)
 	if err != nil {
 		return nil, "", err
-	}
-
-	pathPrefixLen := 1
-	pathPrefixArg := sql.NullString{}
-	if pathPrefix != "" {
-		pathPrefixLen = len(pathPrefix)
-		pathPrefixArg.Valid = true
-		pathPrefixArg.String = pathPrefix
 	}
 
 	// default limit: 0 means unlimited (return all rows, no cursor emitted).
@@ -62,7 +58,7 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 		cursorArg.String = decodedStr
 	}
 
-	rows, err := stmt.QueryContext(ctx, userID, pathPrefixArg, pathPrefixLen, cursorArg, fetchLim)
+	rows, err := stmt.QueryContext(ctx, userID, pathPrefix, cursorArg, fetchLim)
 	if err != nil {
 		return nil, "", parsePQError(err)
 	}
