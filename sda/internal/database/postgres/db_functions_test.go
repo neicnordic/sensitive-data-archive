@@ -743,6 +743,48 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	assert.ErrorIs(ts.T(), err, database.ErrInvalidCursor, "expected ErrInvalidCursor for valid-base64 non-UUID cursor")
 }
 
+func (ts *DatabaseTests) TestGetUserFiles_PathPrefix() {
+	testUser := "GetFilesPrefixUser"
+	paths := []string{
+		"run_1/a.c4gh",
+		"runX1/b.c4gh",
+		"run_10/c.c4gh",
+		"run/d.c4gh",
+		"Run_1/e.c4gh",
+		"datä/f.c4gh",
+		"data/g.c4gh",
+	}
+	for _, p := range paths {
+		fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", p, testUser)
+		assert.NoError(ts.T(), err, "failed to register file in database")
+		err = ts.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", testUser, "{}", "{}")
+		assert.NoError(ts.T(), err, "failed to update status of file in database")
+	}
+
+	for _, tc := range []struct {
+		prefix string
+		want   []string
+	}{
+		{prefix: "", want: paths},
+		// '_' is matched literally, not as a wildcard, and the match is case sensitive
+		{prefix: "run_1", want: []string{"run_1/a.c4gh", "run_10/c.c4gh"}},
+		{prefix: "run_1/", want: []string{"run_1/a.c4gh"}},
+		{prefix: "run", want: []string{"run_1/a.c4gh", "runX1/b.c4gh", "run_10/c.c4gh", "run/d.c4gh"}},
+		// a multibyte prefix must not be cut on a byte count
+		{prefix: "datä", want: []string{"datä/f.c4gh"}},
+		{prefix: "data/g.c4gh", want: []string{"data/g.c4gh"}},
+		{prefix: "data/g.c4gh/", want: nil},
+	} {
+		files, _, err := ts.db.GetUserFiles(context.Background(), testUser, tc.prefix, true, 0, "")
+		assert.NoError(ts.T(), err, "failed to get file list for prefix %q", tc.prefix)
+		got := make([]string, 0, len(files))
+		for _, f := range files {
+			got = append(got, f.InboxPath)
+		}
+		assert.ElementsMatch(ts.T(), tc.want, got, "unexpected files for prefix %q", tc.prefix)
+	}
+}
+
 func (ts *DatabaseTests) TestGetCorrID_sameFilePath() {
 	filePath := "/testuser/file10.c4gh"
 	user := "testuser"
