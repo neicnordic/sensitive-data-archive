@@ -216,6 +216,8 @@ func (app *Finalize) handleMessage(ctx context.Context, message *brokerv2.Messag
 	return callbacks, err
 }
 
+var ErrorUnexpectedFileSizeInArchive = errors.New("archive file size does not match registered file size")
+
 func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) ([]func(), error) {
 	ctx, span := observability.StartSpan(ctx, "backupFile", attribute.String("file-id", message.Key))
 	defer span.End()
@@ -242,7 +244,7 @@ func (app *Finalize) backupFile(ctx context.Context, message *brokerv2.Message) 
 	}
 
 	if diskFileSize != archiveData.FileSize {
-		return []func(){app.errorQueue(ctx, message, "archive file size does not match registered file size")}, fmt.Errorf("archive file size does not match registered file size, (disk size: %d, db size: %d)", diskFileSize, archiveData.FileSize)
+		return []func(){app.errorQueue(ctx, message, ErrorUnexpectedFileSizeInArchive.Error())}, fmt.Errorf("%w, (disk size: %d, db size: %d)", ErrorUnexpectedFileSizeInArchive, diskFileSize, archiveData.FileSize)
 	}
 
 	file, err := app.archiveReader.NewFileReader(ctx, archiveData.Location, archiveData.FilePath)
@@ -361,6 +363,10 @@ func (app *Finalize) setAccession(ctx context.Context, ingestionAccession *schem
 			return nil, nil
 		case err != nil:
 			span.Error("failed to backup file", err)
+
+			if errors.Is(err, ErrorUnexpectedFileSizeInArchive) {
+				return callbacks, nil
+			}
 
 			return callbacks, err
 		}
