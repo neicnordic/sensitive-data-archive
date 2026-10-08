@@ -198,7 +198,11 @@ func TestRouterS3ConfDownloadIsReadOnce(t *testing.T) {
 	authHandler.sessions.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "oidcInbox", map[string]string{"access_token": "token"})
 	cookie := sessionCookie(res)
 
-	req := httptest.NewRequest(http.MethodGet, "/oidc/s3conf-inbox", nil)
+	req := httptest.NewRequest(http.MethodHead, "/oidc/s3conf-inbox", nil)
+	req.AddCookie(cookie)
+	assert.Equal(t, http.StatusMethodNotAllowed, serve(router, req).Code, "HEAD must not consume the download")
+
+	req = httptest.NewRequest(http.MethodGet, "/oidc/s3conf-inbox", nil)
 	req.AddCookie(cookie)
 	res = serve(router, req)
 	assert.Equal(t, http.StatusOK, res.Code)
@@ -229,21 +233,47 @@ func TestRouterEGALoginShowsFlashMessage(t *testing.T) {
 }
 
 func TestRouterCORS(t *testing.T) {
-	preflight := func() *http.Request {
-		req := httptest.NewRequest(http.MethodOptions, "/info", nil)
-		req.Header.Set("Origin", "https://frontend.example")
-		req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	request := func(method, origin string, preflight bool) *http.Request {
+		req := httptest.NewRequest(method, "/info", nil)
+		req.Header.Set("Origin", origin)
+		if preflight {
+			req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+		}
 
 		return req
 	}
 
-	router, _ := testRouter(t, config.CORSConfig{AllowOrigin: "https://frontend.example", AllowMethods: "GET,POST", AllowCredentials: true})
-	res := serve(router, preflight())
+	router, _ := testRouter(t, config.CORSConfig{AllowOrigin: "https://frontend.example", AllowMethods: "get,post", AllowCredentials: true})
+
+	res := serve(router, request(http.MethodOptions, "https://frontend.example", true))
 	assert.Equal(t, http.StatusOK, res.Code)
 	assert.Equal(t, "https://frontend.example", res.Header().Get("Access-Control-Allow-Origin"))
 	assert.Equal(t, "true", res.Header().Get("Access-Control-Allow-Credentials"))
 
+	res = serve(router, request(http.MethodGet, "https://frontend.example", false))
+	assert.Equal(t, http.StatusOK, res.Code, "methods must match regardless of case")
+	assert.Equal(t, "https://frontend.example", res.Header().Get("Access-Control-Allow-Origin"))
+
+	res = serve(router, request(http.MethodOptions, "https://evil.example", true))
+	assert.Equal(t, http.StatusForbidden, res.Code)
+	res = serve(router, request(http.MethodGet, "https://evil.example", false))
+	assert.Equal(t, http.StatusForbidden, res.Code, "a request from an origin that is not allowed must not reach the handler")
+
+	router, _ = testRouter(t, config.CORSConfig{AllowOrigin: "https://frontend.example", AllowMethods: "POST"})
+	res = serve(router, request(http.MethodGet, "https://frontend.example", false))
+	assert.Equal(t, http.StatusForbidden, res.Code, "a method that is not allowed must not reach the handler")
+
+	router, _ = testRouter(t, config.CORSConfig{AllowOrigin: "*", AllowMethods: "GET", AllowCredentials: true})
+	res = serve(router, request(http.MethodGet, "https://any.example", false))
+	assert.Equal(t, "https://any.example", res.Header().Get("Access-Control-Allow-Origin"), "a wildcard with credentials must echo the origin")
+
+	router, _ = testRouter(t, config.CORSConfig{AllowOrigin: "*", AllowMethods: "GET"})
+	res = serve(router, request(http.MethodGet, "https://any.example", false))
+	assert.Equal(t, "*", res.Header().Get("Access-Control-Allow-Origin"))
+
 	router, _ = testRouter(t, config.CORSConfig{})
-	res = serve(router, preflight())
+	res = serve(router, request(http.MethodOptions, "https://frontend.example", true))
 	assert.Empty(t, res.Header().Get("Access-Control-Allow-Origin"), "CORS must be off unless origins are configured")
+	res = serve(router, request(http.MethodGet, "https://frontend.example", false))
+	assert.Equal(t, http.StatusOK, res.Code)
 }

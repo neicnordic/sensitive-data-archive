@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -452,6 +453,20 @@ func addCSPheaders(next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// rejectHead answers HEAD requests with 405. ServeMux hands them to the GET
+// handlers, and some of those have side effects, like handing out a one-shot
+// s3cmd config or exchanging a login code. Iris did not route HEAD at all.
+func rejectHead(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // filesOnly is a file system that hides directories, so that the static file
 // server does not list them.
 type filesOnly struct {
@@ -472,6 +487,44 @@ func (f filesOnly) Open(name string) (http.File, error) {
 	}
 
 	return file, nil
+}
+
+// corsHandler applies the CORS configuration with rs/cors, and keeps two
+// things the Iris middleware it replaces did: requests from an origin, or with
+// a method, that is not allowed are refused with 403 before they reach a
+// handler, and a wildcard origin together with credentials echoes the
+// requesting origin, since browsers refuse "*" for credentialed requests.
+func corsHandler(conf config.CORSConfig, next http.Handler) http.Handler {
+	origins := strings.Split(conf.AllowOrigin, ",")
+	methods := strings.Split(strings.ToUpper(conf.AllowMethods), ",")
+	options := cors.Options{
+		AllowedOrigins:       origins,
+		AllowedMethods:       methods,
+		AllowCredentials:     conf.AllowCredentials,
+		OptionsSuccessStatus: http.StatusOK,
+	}
+	if conf.AllowCredentials && slices.Contains(origins, "*") {
+		options.AllowOriginFunc = func(string) bool { return true }
+	}
+	c := cors.New(options)
+	handler := c.Handler(next)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			method := r.Method
+			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+				method = r.Header.Get("Access-Control-Request-Method")
+			}
+			method = strings.ToUpper(method)
+			if !c.OriginAllowed(r) || (method != http.MethodOptions && !slices.Contains(methods, method)) {
+				w.Header().Add("Vary", "Origin")
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
 }
 
 // router returns the handler serving all endpoints of the service.
@@ -498,15 +551,10 @@ func (auth AuthHandler) router(corsConf config.CORSConfig) http.Handler {
 	// Endpoint for client login info
 	mux.HandleFunc("GET /info", auth.getInfo)
 
-	handler := globalHeaders(mux)
+	handler := globalHeaders(rejectHead(mux))
 
 	if corsConf.AllowOrigin != "" {
-		handler = cors.New(cors.Options{
-			AllowedOrigins:       strings.Split(corsConf.AllowOrigin, ","),
-			AllowedMethods:       strings.Split(corsConf.AllowMethods, ","),
-			AllowCredentials:     corsConf.AllowCredentials,
-			OptionsSuccessStatus: http.StatusOK,
-		}).Handler(handler)
+		handler = corsHandler(corsConf, handler)
 	}
 
 	return otelhttp.NewMiddleware("http-server")(handler)
