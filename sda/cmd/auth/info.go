@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/base64"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 
-	"github.com/kataras/iris/v12"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -35,10 +35,10 @@ func readPublicKeyFile(filename string) (string, error) {
 }
 
 // getInfo returns information needed by the client to authenticate
-func (auth AuthHandler) getInfo(ctx iris.Context) {
+func (auth AuthHandler) getInfo(w http.ResponseWriter, _ *http.Request) {
 	info := Info{ClientID: auth.OAuth2Config.ClientID, OidcURI: auth.Config.OIDC.Provider, PublicKey: auth.pubKey, InboxURI: auth.Config.S3Inbox}
 
-	err := ctx.JSON(info)
+	err := writeJSON(w, info)
 	if err != nil {
 		log.Error("Failure to get Info ", err)
 
