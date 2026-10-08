@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -37,26 +38,32 @@ func (s *sessionStore) SetFlash(w http.ResponseWriter, r *http.Request, key stri
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sess := s.get(r)
+	id, sess := s.get(r)
 	if sess == nil {
-		id := rand.Text()
+		id = rand.Text()
 		sess = &session{flashes: map[string]any{}}
 		s.sessions[id] = sess
-
-		cookie := &http.Cookie{
-			Name:     sessionCookieName,
-			Value:    id,
-			Path:     "/",
-			MaxAge:   int(s.ttl.Seconds()),
-			HttpOnly: true,
-			SameSite: http.SameSiteLaxMode,
-		}
-		http.SetCookie(w, cookie)
 		// Later calls for the same request must find this session.
-		r.AddCookie(cookie)
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
 	}
 	sess.expires = s.now().Add(s.ttl)
 	sess.flashes[key] = value
+
+	// The cookie is set on every call so that it lives as long as the
+	// session it points to, but only once per response.
+	for _, c := range w.Header().Values("Set-Cookie") {
+		if strings.HasPrefix(c, sessionCookieName+"="+id+";") {
+			return
+		}
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookieName,
+		Value:    id,
+		Path:     "/",
+		MaxAge:   int(s.ttl.Seconds()),
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
 }
 
 // PopFlash returns the value stored under key in the session of the request
@@ -65,7 +72,7 @@ func (s *sessionStore) PopFlash(r *http.Request, key string) any {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	sess := s.get(r)
+	_, sess := s.get(r)
 	if sess == nil {
 		return nil
 	}
@@ -75,24 +82,26 @@ func (s *sessionStore) PopFlash(r *http.Request, key string) any {
 	return value
 }
 
-// get returns the unexpired session of the request, or nil. The caller must
-// hold s.mu.
-func (s *sessionStore) get(r *http.Request) *session {
-	cookie, err := r.Cookie(sessionCookieName)
-	if err != nil {
-		return nil
-	}
-	sess, ok := s.sessions[cookie.Value]
-	if !ok {
-		return nil
-	}
-	if !s.now().Before(sess.expires) {
-		delete(s.sessions, cookie.Value)
+// get returns the first unexpired session among the session cookies of the
+// request, and its id. A request can carry several, for example one that
+// outlived a restart of the service, or one that Iris set for the parent
+// domain before this store replaced it. The caller must hold s.mu.
+func (s *sessionStore) get(r *http.Request) (string, *session) {
+	for _, cookie := range r.CookiesNamed(sessionCookieName) {
+		sess, ok := s.sessions[cookie.Value]
+		if !ok {
+			continue
+		}
+		if !s.now().Before(sess.expires) {
+			delete(s.sessions, cookie.Value)
 
-		return nil
+			continue
+		}
+
+		return cookie.Value, sess
 	}
 
-	return sess
+	return "", nil
 }
 
 // removeExpired drops the sessions whose time to live has passed.
