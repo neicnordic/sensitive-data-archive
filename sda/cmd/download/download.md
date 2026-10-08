@@ -928,7 +928,13 @@ attributes these keys control.
 | `PAGINATION_HMAC_SECRET`  | `pagination.hmac-secret`| HMAC secret for page tokens (must match across replicas) |   |
 
 If not configured, a random secret is generated at startup. Page tokens will not
-survive restarts or work across replicas without a configured secret.
+survive restarts or work across replicas without a configured secret. Any random
+string works, for example `openssl rand -hex 32`. You can rotate it at any time;
+outstanding page tokens become invalid and nothing else changes.
+
+When deploying with the Helm chart, set `global.downloadV2.pagination.hmacSecret`;
+see the [Secrets](../../../charts/sda-svc/README.md#secrets) section of the chart
+README for how the chart handles secret values.
 
 ### Audit
 
