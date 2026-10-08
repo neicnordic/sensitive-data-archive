@@ -828,7 +828,7 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	marshaledMsg, _ := json.Marshal(&accession)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
 		span.Error("could not validate accession message", err)
-		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		writeJSON(w, http.StatusBadRequest, http.StatusText(http.StatusBadRequest))
 
 		return
 	}
