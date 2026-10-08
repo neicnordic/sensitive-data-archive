@@ -3,19 +3,21 @@ package main
 import (
 	"errors"
 	"fmt"
+	"html/template"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/kataras/iris/v12"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
 
-// oidcRedirect serves a request to /oidc through an iris app and returns the
+// oidcRedirect serves a request to /oidc and returns the
 // query of the authorization URL the user is redirected to.
 func oidcRedirect(t *testing.T, oidcConf config.OIDCConfig, requestURL string) url.Values {
 	t.Helper()
@@ -29,12 +31,8 @@ func oidcRedirect(t *testing.T, oidcConf config.OIDCConfig, requestURL string) u
 		},
 	}
 
-	app := iris.New()
-	app.Get("/oidc", authHandler.getOIDC)
-	require.NoError(t, app.Build())
-
 	res := httptest.NewRecorder()
-	app.ServeHTTP(res, httptest.NewRequest(http.MethodGet, requestURL, nil))
+	authHandler.getOIDC(res, httptest.NewRequest(http.MethodGet, requestURL, nil))
 	require.Equal(t, http.StatusFound, res.Code, "expected a redirect to the provider")
 
 	location, err := url.Parse(res.Header().Get("Location"))
@@ -106,14 +104,10 @@ func elixirLoginResponse(t *testing.T, requestURL, state string) *httptest.Respo
 
 	authHandler := AuthHandler{Config: config.AuthConf{OIDC: config.OIDCConfig{ID: "client"}}}
 
-	app := iris.New()
-	app.Get("/oidc/login", func(ctx iris.Context) { authHandler.elixirLogin(ctx) })
-	require.NoError(t, app.Build())
-
 	req := httptest.NewRequest(http.MethodGet, requestURL, nil)
 	req.AddCookie(&http.Cookie{Name: "state", Value: state}) // #nosec G124 -- request built by the unit test, no browser involved
 	res := httptest.NewRecorder()
-	app.ServeHTTP(res, req)
+	authHandler.elixirLogin(res, req)
 
 	return res
 }
@@ -128,4 +122,128 @@ func TestElixirLoginReportsProviderError(t *testing.T) {
 	assert.Contains(t, res.Body.String(), "invalid_request", "the provider's error was not reported")
 	assert.NotContains(t, res.Body.String(), "clear your session cookies", "a refused request is not a stale cookie")
 	assert.NotContains(t, res.Body.String(), "More than one entity found", "the description may carry provider internals and belongs in the log only")
+}
+
+// testRouter returns the router of an AuthHandler that serves the real
+// templates and static files.
+func testRouter(t *testing.T, corsConf config.CORSConfig) (http.Handler, AuthHandler) {
+	t.Helper()
+
+	authHandler := AuthHandler{
+		htmlDir:   "frontend/templates",
+		staticDir: "frontend/static",
+		sessions:  newSessionStore(time.Minute),
+	}
+	var err error
+	authHandler.templates, err = template.ParseGlob(filepath.Join(authHandler.htmlDir, "*.html"))
+	require.NoError(t, err)
+
+	return authHandler.router(corsConf), authHandler
+}
+
+func serve(handler http.Handler, req *http.Request) *httptest.ResponseRecorder {
+	res := httptest.NewRecorder()
+	handler.ServeHTTP(res, req)
+
+	return res
+}
+
+func TestRouterServesIndex(t *testing.T) {
+	router, _ := testRouter(t, config.CORSConfig{})
+
+	res := serve(router, httptest.NewRequest(http.MethodGet, "/", nil))
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Contains(t, res.Body.String(), "login-options")
+	assert.NotEmpty(t, res.Header().Get("Content-Security-Policy"))
+	assert.Equal(t, "nosniff", res.Header().Get("X-Content-Type-Options"))
+	assert.Empty(t, res.Result().Cookies(), "a page view without flash messages must not start a session")
+}
+
+func TestRouterUnknownPath(t *testing.T) {
+	router, _ := testRouter(t, config.CORSConfig{})
+
+	res := serve(router, httptest.NewRequest(http.MethodGet, "/unknown", nil))
+	assert.Equal(t, http.StatusNotFound, res.Code, "the root route must not match every path")
+	assert.Equal(t, "nosniff", res.Header().Get("X-Content-Type-Options"))
+}
+
+func TestRouterCSPOnlyOnPages(t *testing.T) {
+	router, _ := testRouter(t, config.CORSConfig{})
+
+	res := serve(router, httptest.NewRequest(http.MethodGet, "/ega/login", nil))
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.NotEmpty(t, res.Header().Get("Content-Security-Policy"))
+
+	res = serve(router, httptest.NewRequest(http.MethodGet, "/login-options", nil))
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Empty(t, res.Header().Get("Content-Security-Policy"))
+	assert.Equal(t, "nosniff", res.Header().Get("X-Content-Type-Options"))
+}
+
+func TestRouterStaticFiles(t *testing.T) {
+	router, _ := testRouter(t, config.CORSConfig{})
+
+	res := serve(router, httptest.NewRequest(http.MethodGet, "/public/login.js", nil))
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Contains(t, res.Body.String(), "login-options")
+
+	res = serve(router, httptest.NewRequest(http.MethodGet, "/public/", nil))
+	assert.Equal(t, http.StatusNotFound, res.Code, "the static directory must not be listed")
+}
+
+func TestRouterS3ConfDownloadIsReadOnce(t *testing.T) {
+	router, authHandler := testRouter(t, config.CORSConfig{})
+
+	res := httptest.NewRecorder()
+	authHandler.sessions.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "oidcInbox", map[string]string{"access_token": "token"})
+	cookie := sessionCookie(res)
+
+	req := httptest.NewRequest(http.MethodGet, "/oidc/s3conf-inbox", nil)
+	req.AddCookie(cookie)
+	res = serve(router, req)
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "attachment; filename=s3cmd-inbox.conf", res.Header().Get("Content-Disposition"))
+	assert.Equal(t, "[default]\naccess_token = token\n", res.Body.String())
+
+	req = httptest.NewRequest(http.MethodGet, "/oidc/s3conf-inbox", nil)
+	req.AddCookie(cookie)
+	res = serve(router, req)
+	assert.Equal(t, http.StatusFound, res.Code, "a second download must redirect home")
+	assert.Equal(t, "/", res.Header().Get("Location"))
+}
+
+func TestRouterEGALoginShowsFlashMessage(t *testing.T) {
+	router, authHandler := testRouter(t, config.CORSConfig{})
+
+	res := httptest.NewRecorder()
+	authHandler.sessions.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "message", "Provided credentials are not valid")
+	cookie := sessionCookie(res)
+
+	req := httptest.NewRequest(http.MethodGet, "/ega/login", nil)
+	req.AddCookie(cookie)
+	assert.Contains(t, serve(router, req).Body.String(), "Provided credentials are not valid")
+
+	req = httptest.NewRequest(http.MethodGet, "/ega/login", nil)
+	req.AddCookie(cookie)
+	assert.NotContains(t, serve(router, req).Body.String(), "Provided credentials are not valid", "the message must only be shown once")
+}
+
+func TestRouterCORS(t *testing.T) {
+	preflight := func() *http.Request {
+		req := httptest.NewRequest(http.MethodOptions, "/info", nil)
+		req.Header.Set("Origin", "https://frontend.example")
+		req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+
+		return req
+	}
+
+	router, _ := testRouter(t, config.CORSConfig{AllowOrigin: "https://frontend.example", AllowMethods: "GET,POST", AllowCredentials: true})
+	res := serve(router, preflight())
+	assert.Equal(t, http.StatusOK, res.Code)
+	assert.Equal(t, "https://frontend.example", res.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", res.Header().Get("Access-Control-Allow-Credentials"))
+
+	router, _ = testRouter(t, config.CORSConfig{})
+	res = serve(router, preflight())
+	assert.Empty(t, res.Header().Get("Access-Control-Allow-Origin"), "CORS must be off unless origins are configured")
 }
