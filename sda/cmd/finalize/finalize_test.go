@@ -217,6 +217,60 @@ func (ts *TestSuite) TestBackupFile_DBFailureAfterWrite() {
 	assert.Error(ts.T(), err)
 }
 
+func (ts *TestSuite) TestBackupFile_UnexpectedFileSizeInArchive() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(2),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(1), nil).Once()
+
+	ts.mockBroker.On("Publish", "error", mock.MatchedBy(func(msg broker.Message) bool {
+		return msg.Headers != nil && msg.Headers["error-queue-reason"] == ErrorUnexpectedFileSizeInArchive.Error()
+	})).Return(nil).Once()
+
+	callbacks, err := ts.app.backupFile(context.Background(), message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.Error(ts.T(), err)
+}
+
+func (ts *TestSuite) TestSetAccession_WithBackup_UnexpectedFileSizeInArchive() {
+	fileID := uuid.NewString()
+	userName := "test-finalize"
+	filePath := fmt.Sprintf("/%v/TestIngestMessage.c4gh", userName)
+	accession := "file-asdfg-1234"
+	message := createMessage(filePath, userName, accession, fileID)
+	var content schema.IngestionAccession
+	_ = json.Unmarshal(message.Body, &content)
+
+	ts.mockDB.On("CheckAccessionIDExists", accession, fileID).Return("", nil).Once()
+
+	ts.mockDB.On("GetArchived", fileID).Return(&database.ArchiveData{
+		FilePath: fileID,
+		FileSize: int64(2),
+		Location: "archive_test_location",
+	}, nil).Once()
+	ts.mockArchiveReader.On("GetFileSize", "archive_test_location", fileID).Return(int64(1), nil).Once()
+
+	ts.mockBroker.On("Publish", "error", mock.MatchedBy(func(msg broker.Message) bool {
+		return msg.Headers != nil && msg.Headers["error-queue-reason"] == ErrorUnexpectedFileSizeInArchive.Error()
+	})).Return(nil).Once()
+
+	callbacks, err := ts.app.setAccession(context.Background(), &content, message)
+	for _, cb := range callbacks {
+		cb()
+	}
+	assert.NoError(ts.T(), err)
+}
+
 func (ts *TestSuite) TestHandleMessage_disabled() {
 	fileID := uuid.NewString()
 	userName := "test-finalize"
