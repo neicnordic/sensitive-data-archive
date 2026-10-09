@@ -11,29 +11,37 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 )
 
-const getUserFilesQuery = "getUserFiles"
+const (
+	getUserFilesQuery             = "getUserFiles"
+	getUserFilesByPathPrefixQuery = "getUserFilesByPathPrefix"
+)
 
 func init() {
-	// The path prefix is matched as the byte range [prefix, prefix || U+10FFFF) in the C
-	// collation, so it is served by files_submission_user_submission_file_path_c_idx instead
-	// of filtering every file of the user. An empty prefix matches all paths.
+	// Without a path prefix the files are read in id order from
+	// files_submission_user_id_idx, so a page stops after limit+1 rows.
 	queries[getUserFilesQuery] = `SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
  WHERE f.submission_user = $1
-	AND f.submission_file_path COLLATE "C" >= $2::TEXT
-	AND f.submission_file_path COLLATE "C" < $2::TEXT || chr(1114111)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
-	AND ($3::UUID IS NULL OR f.id > $3::UUID)
-ORDER BY f.id ASC LIMIT $4;`
+	AND ($2::UUID IS NULL OR f.id > $2::UUID)
+ORDER BY f.id ASC LIMIT $3;`
+
+	// The path prefix is matched as the byte range [prefix, prefix || U+10FFFF) in the C
+	// collation, so it is served by files_submission_user_submission_file_path_c_idx instead
+	// of filtering every file of the user.
+	queries[getUserFilesByPathPrefixQuery] = `SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
+FROM sda.files AS f
+	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
+ WHERE f.submission_user = $1
+	AND f.submission_file_path COLLATE "C" >= $4::TEXT
+	AND f.submission_file_path COLLATE "C" < $4::TEXT || chr(1114111)
+	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
+	AND ($2::UUID IS NULL OR f.id > $2::UUID)
+ORDER BY f.id ASC LIMIT $3;`
 }
 
 func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix string, allData bool, limit int, cursor string) ([]*database.SubmissionFileInfo, string, error) {
-	stmt, err := db.getPreparedStmt(tx, getUserFilesQuery)
-	if err != nil {
-		return nil, "", err
-	}
-
 	// default limit: 0 means unlimited (return all rows, no cursor emitted).
 	// Clamped to math.MaxInt32-1 so that fetchLim = lim+1 never overflows int32
 	// on 32-bit platforms and avoids sending math.MaxInt32+1 as a LIMIT to Postgres.
@@ -58,7 +66,18 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 		cursorArg.String = decodedStr
 	}
 
-	rows, err := stmt.QueryContext(ctx, userID, pathPrefix, cursorArg, fetchLim)
+	// The two queries are kept apart, instead of one query with an optional prefix
+	// condition, so that the generic plan of each prepared statement uses its own index.
+	queryName, args := getUserFilesQuery, []any{userID, cursorArg, fetchLim}
+	if pathPrefix != "" {
+		queryName, args = getUserFilesByPathPrefixQuery, append(args, pathPrefix)
+	}
+	stmt, err := db.getPreparedStmt(tx, queryName)
+	if err != nil {
+		return nil, "", err
+	}
+
+	rows, err := stmt.QueryContext(ctx, args...)
 	if err != nil {
 		return nil, "", parsePQError(err)
 	}
