@@ -41,7 +41,7 @@ VALUES (0, now(), 'Created with version'),
        (24, now(), 'Add last_event column to files to avoid join on file_event_log'),
        (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading'),
        (26, now(), 'Add removed file event'),
-       (27, now(), 'Add C collation index on files(submission_user, submission_file_path) for path prefix lookups');
+       (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -120,6 +120,7 @@ CREATE TABLE files (
 -- Add indexes to the files table
 CREATE INDEX files_submission_user_submission_file_path_idx ON files(submission_user, submission_file_path);
 CREATE INDEX files_submission_user_submission_file_path_c_idx ON files(submission_user, submission_file_path COLLATE "C");
+CREATE INDEX files_submission_user_id_idx ON files(submission_user, id);
 CREATE INDEX files_submission_location_idx ON files(submission_location);
 CREATE INDEX files_archive_location_idx ON files(archive_location);
 CREATE INDEX files_backup_location_idx ON files(backup_location);
