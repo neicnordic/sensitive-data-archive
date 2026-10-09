@@ -28,6 +28,7 @@ func TestFlashIsReadOnce(t *testing.T) {
 	store.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "key", "value")
 	cookie := sessionCookie(res)
 	require.NotNil(t, cookie, "setting a flash must start a session")
+	assert.True(t, cookie.Secure)
 	assert.True(t, cookie.HttpOnly)
 	assert.Equal(t, http.SameSiteLaxMode, cookie.SameSite)
 	assert.Equal(t, "/", cookie.Path)
