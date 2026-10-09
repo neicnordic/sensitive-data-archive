@@ -61,6 +61,7 @@ func (s *sessionStore) SetFlash(w http.ResponseWriter, r *http.Request, key stri
 		Value:    id,
 		Path:     "/",
 		MaxAge:   int(s.ttl.Seconds()),
+		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})
