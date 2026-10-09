@@ -279,7 +279,7 @@ func (auth AuthHandler) getOIDC(w http.ResponseWriter, r *http.Request) {
 		authOptions = append(authOptions, oauth2.SetAuthURLParam("acr_values", strings.Join(auth.Config.OIDC.AcrValues, " ")))
 	}
 
-	http.Redirect(w, r, auth.OAuth2Config.AuthCodeURL(state.String(), authOptions...), http.StatusFound)
+	http.Redirect(w, r, auth.OAuth2Config.AuthCodeURL(state.String(), authOptions...), http.StatusFound) // #nosec G710 -- target is the provider from configuration, the request only adds query parameters
 }
 
 // elixirLogin authenticates the user with return values from the oidc
@@ -313,7 +313,7 @@ func (auth AuthHandler) elixirLogin(w http.ResponseWriter, r *http.Request) *OID
 		// The error code comes from the query string, so pin the content type
 		// rather than leave it to be sniffed, and quote what is echoed back.
 		w.Header().Set("Content-Type", "text/plain")
-		if _, err := fmt.Fprintf(w, "Authentication failed. The login provider refused the request: %q", providerError); err != nil {
+		if _, err := fmt.Fprintf(w, "Authentication failed. The login provider refused the request: %q", providerError); err != nil { // #nosec G705 -- content type is text/plain, nosniff is set and the value is quoted
 			log.Error("Failed to write response: ", err)
 		}
 
