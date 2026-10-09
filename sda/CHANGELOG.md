@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.3] - 2026-10-09
+
 ### Fixed
 
 - api: `GET /users/{username}/files` is much faster on large `files` tables; the `path_prefix` filter and the pagination cursor are now served by indexes instead of scanning every file of the user, or the whole table (on a 4.7M-row table, listing a folder of about 8,000 files went from 149 s to under 1 s)
