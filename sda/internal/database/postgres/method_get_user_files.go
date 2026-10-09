@@ -18,13 +18,14 @@ const (
 
 func init() {
 	// Without a path prefix the files are read in id order from
-	// files_submission_user_id_idx, so a page stops after limit+1 rows.
+	// files_submission_user_id_idx, starting right after the cursor, so a page
+	// stops after limit+1 rows.
 	queries[getUserFilesQuery] = `SELECT f.id, f.submission_file_path, f.stable_id, COALESCE(f.last_event, '') as event, f.created_at, f.submission_file_size
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
  WHERE f.submission_user = $1
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
-	AND ($2::UUID IS NULL OR f.id > $2::UUID)
+	AND f.id > $2::UUID
 ORDER BY f.id ASC LIMIT $3;`
 
 	// The path prefix is matched as the byte range [prefix, prefix || U+10FFFF) in the C
@@ -37,7 +38,7 @@ FROM sda.files AS f
 	AND f.submission_file_path COLLATE "C" >= $4::TEXT
 	AND f.submission_file_path COLLATE "C" < $4::TEXT || chr(1114111)
 	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
-	AND ($2::UUID IS NULL OR f.id > $2::UUID)
+	AND f.id > $2::UUID
 ORDER BY f.id ASC LIMIT $3;`
 }
 
@@ -52,7 +53,10 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 	// Fetch one extra row to determine whether a next page exists.
 	fetchLim := lim + 1
 
-	cursorArg := sql.NullString{}
+	// The cursor is the id of the last file of the previous page. Without one,
+	// the nil UUID is used, which sorts before every id, so the cursor condition
+	// stays a plain f.id > $2 that the index can start from.
+	cursorArg := uuid.Nil.String()
 	if cursor != "" {
 		decoded, derr := base64.RawURLEncoding.DecodeString(cursor)
 		if derr != nil {
@@ -62,8 +66,7 @@ func (db *pgDb) getUserFiles(ctx context.Context, tx *sql.Tx, userID, pathPrefix
 		if _, parseErr := uuid.Parse(decodedStr); parseErr != nil {
 			return nil, "", fmt.Errorf("%w: decoded cursor is not a valid file ID", database.ErrInvalidCursor)
 		}
-		cursorArg.Valid = true
-		cursorArg.String = decodedStr
+		cursorArg = decodedStr
 	}
 
 	// The two queries are kept apart, instead of one query with an optional prefix
