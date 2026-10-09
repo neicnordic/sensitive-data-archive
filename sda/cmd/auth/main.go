@@ -1,28 +1,32 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"path/filepath"
+	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/iris-contrib/middleware/cors"
-	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/sessions"
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	"github.com/rs/cors"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"golang.org/x/oauth2"
@@ -47,23 +51,63 @@ type AuthHandler struct {
 	staticDir    string
 	pubKey       string
 	db           database.Database
+	templates    *template.Template
+	sessions     *sessionStore
+	// secure sets the Secure attribute on the cookies, see secureCookies
+	secure bool
+}
+
+// secureCookies reports whether sda-auth is reached over HTTPS, either because
+// it serves TLS itself or because the OIDC redirect URL is https, which means
+// TLS is terminated in front of it. Browsers drop Secure cookies that arrive
+// over plain HTTP, which broke the login there, see #1101.
+func secureCookies(server config.ServerConfig, oidcConf config.OIDCConfig) bool {
+	return (server.Cert != "" && server.Key != "") || strings.HasPrefix(oidcConf.RedirectURL, "https://")
+}
+
+// render executes the named template with data and writes the result. The
+// page is rendered in full before anything is written, so a failed render
+// leaves the response untouched for the caller to write something else.
+func (auth AuthHandler) render(w http.ResponseWriter, name string, data map[string]any) error {
+	var page bytes.Buffer
+	if err := auth.templates.ExecuteTemplate(&page, name, data); err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if _, err := page.WriteTo(w); err != nil {
+		log.Error("Failed to write page: ", err)
+	}
+
+	return nil
+}
+
+// writeJSON writes v as a JSON response.
+func writeJSON(w http.ResponseWriter, v any) error {
+	body, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, err = w.Write(body)
+
+	return err
 }
 
 // getS3Config retrieves S3 config from session flash and serves it as a
 // downloadable s3cmd file with the specified fileName. Redirects to home if
 // config is missing.
-func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName string) {
-	log.Infoln(ctx.Request().URL.Path)
+func (auth AuthHandler) getS3Config(w http.ResponseWriter, r *http.Request, authType string, fileName string) {
+	log.Infoln(r.URL.Path)
 
-	s := sessions.Get(ctx)
-	s3conf := s.GetFlash(authType)
-	if s3conf == nil {
-		ctx.Redirect("/")
+	s3cfmap, ok := auth.sessions.PopFlash(r, authType).(map[string]string)
+	if !ok {
+		http.Redirect(w, r, "/", http.StatusFound)
 
 		return
 	}
-	s3cfmap := s3conf.(map[string]string)
-	ctx.ResponseWriter().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", fileName))
 
 	s3c := "[default]\n"
 
@@ -72,7 +116,7 @@ func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName 
 		s3c += entry
 	}
 
-	_, err := io.Copy(ctx.ResponseWriter(), strings.NewReader(s3c))
+	_, err := io.Copy(w, strings.NewReader(s3c))
 	if err != nil {
 		log.Error("Failed to write s3config response: ", err)
 
@@ -81,10 +125,12 @@ func (auth AuthHandler) getS3Config(ctx iris.Context, authType string, fileName 
 }
 
 // getMain returns the index.html page
-func (auth AuthHandler) getMain(ctx iris.Context) {
-	ctx.ViewData("infoUrl", auth.Config.InfoURL)
-	ctx.ViewData("infoText", auth.Config.InfoText)
-	err := ctx.View("index.html")
+func (auth AuthHandler) getMain(w http.ResponseWriter, _ *http.Request) {
+	data := map[string]any{
+		"infoUrl":  auth.Config.InfoURL,
+		"infoText": auth.Config.InfoText,
+	}
+	err := auth.render(w, "index.html", data)
 	if err != nil {
 		log.Error("Failed to view index page: ", err)
 
@@ -93,7 +139,7 @@ func (auth AuthHandler) getMain(ctx iris.Context) {
 }
 
 // getLoginOptions returns the available login providers as JSON
-func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
+func (auth AuthHandler) getLoginOptions(w http.ResponseWriter, _ *http.Request) {
 	var response []LoginOption
 	// Only add the OIDC option if it has both id and secret
 	if auth.Config.OIDC.ID != "" && auth.Config.OIDC.Secret != "" {
@@ -104,7 +150,7 @@ func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 	if auth.Config.Cega.ID != "" && auth.Config.Cega.Secret != "" {
 		response = append(response, LoginOption{Name: "EGA", URL: "/ega/login"})
 	}
-	err := ctx.JSON(response)
+	err := writeJSON(w, response)
 	if err != nil {
 		log.Error("Failed to create JSON login options: ", err)
 
@@ -113,12 +159,9 @@ func (auth AuthHandler) getLoginOptions(ctx iris.Context) {
 }
 
 // postEGA handles post requests for logging in using EGA
-func (auth AuthHandler) postEGA(ctx iris.Context) {
-	s := sessions.Get(ctx)
-
-	userform := ctx.FormValues()
-	username := userform["username"][0]
-	password := userform["password"][0]
+func (auth AuthHandler) postEGA(w http.ResponseWriter, r *http.Request) {
+	username := r.FormValue("username")
+	password := r.FormValue("password")
 
 	res, err := authenticateWithCEGA(auth.Config.Cega, username)
 
@@ -138,8 +181,8 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 
 		if err != nil {
 			log.Error("Failed to parse cega response: ", err)
-			s.SetFlash("message", "Problems connecting to EGA authentication server")
-			ctx.Redirect("/ega/login", iris.StatusSeeOther)
+			auth.sessions.SetFlash(w, r, "message", "Problems connecting to EGA authentication server")
+			http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 
 			return
 		}
@@ -159,82 +202,83 @@ func (auth AuthHandler) postEGA(ctx iris.Context) {
 			token, expDate, err := generateJwtToken(claims, auth.Config.JwtPrivateKey, auth.Config.JwtSignatureAlg)
 			if err != nil {
 				log.Errorf("error when generating token: %v", err)
-				s.SetFlash("message", "Unexpected error, please try again.")
-				ctx.Redirect("/ega/login", iris.StatusSeeOther)
+				auth.sessions.SetFlash(w, r, "message", "Unexpected error, please try again.")
+				http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 
 				return
 			}
 
 			s3conf := getS3ConfigMap(token, auth.Config.S3Inbox, username)
-			s.SetFlash("ega", s3conf)
+			auth.sessions.SetFlash(w, r, "ega", s3conf)
 
-			ctx.ViewData("infoUrl", auth.Config.InfoURL)
-			ctx.ViewData("infoText", auth.Config.InfoText)
-			ctx.ViewData("User", username)
-			ctx.ViewData("Token", token)
-			ctx.ViewData("ExpDate", expDate)
-			err = ctx.View("ega.html")
+			data := map[string]any{
+				"infoUrl":  auth.Config.InfoURL,
+				"infoText": auth.Config.InfoText,
+				"User":     username,
+				"Token":    token,
+				"ExpDate":  expDate,
+			}
+			err = auth.render(w, "ega.html", data)
 
 			if err != nil {
 				log.Error("Failed to create view: ", err)
 
-				// Since the context has already started writing the response to
-				// the client, the resulting page will be ugly, but at least
-				// show an error message, and an oppertunity to log in again.
-				ctx.ViewData("Reason", "Unexpected error, please try again.")
-				err = ctx.View("loginform.html")
+				// Nothing has been written yet, so show an error message and
+				// an opportunity to log in again instead.
+				data["Reason"] = "Unexpected error, please try again."
+				err = auth.render(w, "loginform.html", data)
 				log.Error("Failed to create backup view: ", err)
 			}
 		} else {
 			log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Invalid password entered by user")
-			s.SetFlash("message", "Provided credentials are not valid")
-			ctx.Redirect("/ega/login", iris.StatusSeeOther)
+			auth.sessions.SetFlash(w, r, "message", "Provided credentials are not valid")
+			http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 		}
 
 	case 500, 502, 503:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
-		s.SetFlash("message", "EGA authentication server could not be contacted")
-		ctx.Redirect("/ega/login", iris.StatusSeeOther)
+		auth.sessions.SetFlash(w, r, "message", "EGA authentication server could not be contacted")
+		http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 
 	case 401:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate service (auth_cega_id/secret)")
-		s.SetFlash("message", "Problems connecting to EGA authentication server")
-		ctx.Redirect("/ega/login", iris.StatusSeeOther)
+		auth.sessions.SetFlash(w, r, "message", "Problems connecting to EGA authentication server")
+		http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 	default:
 		log.WithFields(log.Fields{"authType": "cega", "user": username}).Error("Failed to authenticate user")
-		s.SetFlash("message", "Provided credentials are not valid")
-		ctx.Redirect("/ega/login", iris.StatusSeeOther)
+		auth.sessions.SetFlash(w, r, "message", "Provided credentials are not valid")
+		http.Redirect(w, r, "/ega/login", http.StatusSeeOther)
 	}
 }
 
 // getEGALogin returns the EGA login form
-func (auth AuthHandler) getEGALogin(ctx iris.Context) {
-	s := sessions.Get(ctx)
-	ctx.ViewData("infoUrl", auth.Config.InfoURL)
-	ctx.ViewData("infoText", auth.Config.InfoText)
-	message := s.GetFlashString("message")
-	if message != "" {
-		ctx.ViewData("Reason", message)
+func (auth AuthHandler) getEGALogin(w http.ResponseWriter, r *http.Request) {
+	data := map[string]any{
+		"infoUrl":  auth.Config.InfoURL,
+		"infoText": auth.Config.InfoText,
 	}
-	err := ctx.View("loginform.html")
+	if message, _ := auth.sessions.PopFlash(r, "message").(string); message != "" {
+		data["Reason"] = message
+	}
+	err := auth.render(w, "loginform.html", data)
 	if err != nil {
 		log.Error("Failed to view invalid credentials form: ", err)
 	}
 }
 
 // getEGAConf returns an s3config file for an oidc login
-func (auth AuthHandler) getEGAConf(ctx iris.Context) {
-	auth.getS3Config(ctx, "ega", "s3cmd-inbox.conf")
+func (auth AuthHandler) getEGAConf(w http.ResponseWriter, r *http.Request) {
+	auth.getS3Config(w, r, "ega", "s3cmd-inbox.conf")
 }
 
 // getOIDC redirects to the oidc page defined in auth.Config
-func (auth AuthHandler) getOIDC(ctx iris.Context) {
+func (auth AuthHandler) getOIDC(w http.ResponseWriter, r *http.Request) {
 	state := uuid.New()
-	ctx.SetCookie(&http.Cookie{Name: "state", Value: state.String(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: "state", Value: state.String(), Secure: auth.secure, HttpOnly: true, SameSite: http.SameSiteLaxMode}) // #nosec G124 -- Secure follows the configured scheme, see secureCookies
 
 	var authOptions []oauth2.AuthCodeOption
 
-	redirectURI := ctx.Request().URL.Query().Get("redirect_uri")
+	redirectURI := r.URL.Query().Get("redirect_uri")
 	if redirectURI != "" {
 		authOptions = append(authOptions, oauth2.SetAuthURLParam("redirect_uri", redirectURI))
 	}
@@ -245,19 +289,22 @@ func (auth AuthHandler) getOIDC(ctx iris.Context) {
 		authOptions = append(authOptions, oauth2.SetAuthURLParam("acr_values", strings.Join(auth.Config.OIDC.AcrValues, " ")))
 	}
 
-	ctx.Redirect(auth.OAuth2Config.AuthCodeURL(state.String(), authOptions...))
+	http.Redirect(w, r, auth.OAuth2Config.AuthCodeURL(state.String(), authOptions...), http.StatusFound) // #nosec G710 -- target is the provider from configuration, the request only adds query parameters
 }
 
 // elixirLogin authenticates the user with return values from the oidc
 // login page and returns the resulting data to the getOIDCLogin page, or
 // getOIDCCORSLogin endpoint.
-func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
-	state := ctx.Request().URL.Query().Get("state")
-	sessionState := ctx.GetCookie("state")
+func (auth AuthHandler) elixirLogin(w http.ResponseWriter, r *http.Request) *OIDCData {
+	state := r.URL.Query().Get("state")
+	var sessionState string
+	if cookie, err := r.Cookie("state"); err == nil {
+		sessionState = cookie.Value
+	}
 
 	if state != sessionState {
 		log.Errorf("State of incoming request (%s) does not match with your session's state (%s)", state, sessionState)
-		_, err := ctx.Writef("Authentication failed. You may need to clear your session cookies and try again.")
+		_, err := fmt.Fprint(w, "Authentication failed. You may need to clear your session cookies and try again.")
 		if err != nil {
 			log.Error("Failed to write response: ", err)
 
@@ -270,24 +317,24 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 	// The provider reports a refused authorization by redirecting back with an
 	// error instead of a code. Without this the empty code would be exchanged,
 	// and the provider's description of what went wrong would be lost.
-	if providerError := ctx.Request().URL.Query().Get("error"); providerError != "" {
-		description := ctx.Request().URL.Query().Get("error_description")
+	if providerError := r.URL.Query().Get("error"); providerError != "" {
+		description := r.URL.Query().Get("error_description")
 		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("provider refused the authorization request: %s (%s)", providerError, description)
 		// The error code comes from the query string, so pin the content type
 		// rather than leave it to be sniffed, and quote what is echoed back.
-		ctx.ContentType("text/plain")
-		if _, err := ctx.Writef("Authentication failed. The login provider refused the request: %q", providerError); err != nil {
+		w.Header().Set("Content-Type", "text/plain")
+		if _, err := fmt.Fprintf(w, "Authentication failed. The login provider refused the request: %q", providerError); err != nil { // #nosec G705 -- content type is text/plain, nosniff is set and the value is quoted
 			log.Error("Failed to write response: ", err)
 		}
 
 		return nil
 	}
 
-	code := ctx.Request().URL.Query().Get("code")
+	code := r.URL.Query().Get("code")
 	idStruct, err := authenticateWithOidc(auth.OAuth2Config, auth.OIDCProvider, code, auth.Config.OIDC)
 	if err != nil {
 		log.WithFields(log.Fields{"authType": "oidc"}).Errorf("authentication failed: %s", err)
-		_, err := ctx.Writef("%s", loginFailureMessage(err))
+		_, err := fmt.Fprintf(w, "%s", loginFailureMessage(err))
 		if err != nil {
 			log.Error("Failed to write response: ", err)
 
@@ -296,7 +343,7 @@ func (auth AuthHandler) elixirLogin(ctx iris.Context) *OIDCData {
 
 		return nil
 	}
-	err = auth.db.UpdateUserInfo(ctx, idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
+	err = auth.db.UpdateUserInfo(r.Context(), idStruct.User, idStruct.Fullname, idStruct.Email, idStruct.EdupersonEntitlement)
 	if err != nil {
 		log.Warn("Could not log user info.")
 	}
@@ -338,28 +385,29 @@ func loginFailureMessage(err error) string {
 	return "Authentication failed. You may need to clear your session cookies and try again."
 }
 
-// getOIDCLogin renders the `oidc.html` template to the given iris context
-func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
-	oidcData := auth.elixirLogin(ctx)
+// getOIDCLogin renders the `oidc.html` template
+func (auth AuthHandler) getOIDCLogin(w http.ResponseWriter, r *http.Request) {
+	oidcData := auth.elixirLogin(w, r)
 	if oidcData == nil {
 		return
 	}
 
-	s := sessions.Get(ctx)
-	s.SetFlash("oidcInbox", oidcData.S3ConfInbox)
-	s.SetFlash("oidcDownload", oidcData.S3ConfDownload)
-	ctx.ViewData("cegaID", auth.Config.Cega.ID)
-	ctx.ViewData("infoUrl", auth.Config.InfoURL)
-	ctx.ViewData("infoText", auth.Config.InfoText)
-	ctx.ViewData("User", oidcData.OIDCID.User)
-	ctx.ViewData("Fullname", oidcData.OIDCID.Fullname)
-	ctx.ViewData("Passport", oidcData.OIDCID.Passport)
-	ctx.ViewData("RawToken", oidcData.OIDCID.RawToken)
-	ctx.ViewData("ResignedToken", oidcData.OIDCID.ResignedToken)
-	ctx.ViewData("ExpDateRaw", oidcData.OIDCID.ExpDateRaw)
-	ctx.ViewData("ExpDateResigned", oidcData.OIDCID.ExpDateResigned)
+	auth.sessions.SetFlash(w, r, "oidcInbox", oidcData.S3ConfInbox)
+	auth.sessions.SetFlash(w, r, "oidcDownload", oidcData.S3ConfDownload)
+	data := map[string]any{
+		"cegaID":          auth.Config.Cega.ID,
+		"infoUrl":         auth.Config.InfoURL,
+		"infoText":        auth.Config.InfoText,
+		"User":            oidcData.OIDCID.User,
+		"Fullname":        oidcData.OIDCID.Fullname,
+		"Passport":        oidcData.OIDCID.Passport,
+		"RawToken":        oidcData.OIDCID.RawToken,
+		"ResignedToken":   oidcData.OIDCID.ResignedToken,
+		"ExpDateRaw":      oidcData.OIDCID.ExpDateRaw,
+		"ExpDateResigned": oidcData.OIDCID.ExpDateResigned,
+	}
 
-	err := ctx.View("oidc.html")
+	err := auth.render(w, "oidc.html", data)
 	if err != nil {
 		log.Error("Failed to view login form: ", err)
 
@@ -367,14 +415,14 @@ func (auth AuthHandler) getOIDCLogin(ctx iris.Context) {
 	}
 }
 
-// getOIDCCORSLogin returns the oidc data as JSON to the given iris context
-func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
-	oidcData := auth.elixirLogin(ctx)
+// getOIDCCORSLogin returns the oidc data as JSON
+func (auth AuthHandler) getOIDCCORSLogin(w http.ResponseWriter, r *http.Request) {
+	oidcData := auth.elixirLogin(w, r)
 	if oidcData == nil {
 		return
 	}
 
-	err := ctx.JSON(oidcData)
+	err := writeJSON(w, oidcData)
 	if err != nil {
 		log.Error("Failed to view login form: ", err)
 
@@ -383,32 +431,143 @@ func (auth AuthHandler) getOIDCCORSLogin(ctx iris.Context) {
 }
 
 // getOIDCConfInbox returns an s3config file for uploading to the Inbox
-func (auth AuthHandler) getOIDCConfInbox(ctx iris.Context) {
-	auth.getS3Config(ctx, "oidcInbox", "s3cmd-inbox.conf")
+func (auth AuthHandler) getOIDCConfInbox(w http.ResponseWriter, r *http.Request) {
+	auth.getS3Config(w, r, "oidcInbox", "s3cmd-inbox.conf")
 }
 
 // getOIDCConfDownload returns an s3config file for downloading from the Archive
-func (auth AuthHandler) getOIDCConfDownload(ctx iris.Context) {
-	auth.getS3Config(ctx, "oidcDownload", "s3cmd-download.conf")
+func (auth AuthHandler) getOIDCConfDownload(w http.ResponseWriter, r *http.Request) {
+	auth.getS3Config(w, r, "oidcDownload", "s3cmd-download.conf")
 }
 
 // globalHeaders presets common response headers
-func globalHeaders(ctx iris.Context) {
-	ctx.ResponseWriter().Header().Set("X-Content-Type-Options", "nosniff")
-	ctx.Next()
+func globalHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		next.ServeHTTP(w, r)
+	})
 }
 
 // addCSPheaders implements CSP and recommended complementary policies
-func addCSPheaders(ctx iris.Context) {
-	ctx.ResponseWriter().Header().Set("Content-Security-Policy", "default-src 'self';"+
-		"script-src-elem 'self';"+
-		"img-src 'self' data:;"+
-		"frame-ancestors 'none';"+
-		"form-action 'self'")
+func addCSPheaders(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Security-Policy", "default-src 'self';"+
+			"script-src-elem 'self';"+
+			"img-src 'self' data:;"+
+			"frame-ancestors 'none';"+
+			"form-action 'self'")
 
-	ctx.ResponseWriter().Header().Set("Referrer-Policy", "no-referrer")
-	ctx.ResponseWriter().Header().Set("X-Frame-Options", "DENY") // legacy option, obsolete by CSP frame-ancestors in new browsers
-	ctx.Next()
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("X-Frame-Options", "DENY") // legacy option, obsolete by CSP frame-ancestors in new browsers
+		next(w, r)
+	}
+}
+
+// rejectHead answers HEAD requests with 405. ServeMux hands them to the GET
+// handlers, and some of those have side effects, like handing out a one-shot
+// s3cmd config or exchanging a login code. Iris did not route HEAD at all.
+func rejectHead(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodHead {
+			http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
+
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// filesOnly is a file system that hides directories, so that the static file
+// server does not list them.
+type filesOnly struct {
+	fs http.FileSystem
+}
+
+func (f filesOnly) Open(name string) (http.File, error) {
+	file, err := f.fs.Open(name)
+	if err != nil {
+		return nil, err
+	}
+
+	stat, err := file.Stat()
+	if err != nil || stat.IsDir() {
+		_ = file.Close()
+
+		return nil, os.ErrNotExist
+	}
+
+	return file, nil
+}
+
+// corsHandler applies the CORS configuration with rs/cors, and keeps two
+// things the Iris middleware it replaces did: requests from an origin, or with
+// a method, that is not allowed are refused with 403 before they reach a
+// handler, and a wildcard origin together with credentials echoes the
+// requesting origin, since browsers refuse "*" for credentialed requests.
+func corsHandler(conf config.CORSConfig, next http.Handler) http.Handler {
+	origins := strings.Split(conf.AllowOrigin, ",")
+	methods := strings.Split(strings.ToUpper(conf.AllowMethods), ",")
+	options := cors.Options{
+		AllowedOrigins:       origins,
+		AllowedMethods:       methods,
+		AllowCredentials:     conf.AllowCredentials,
+		OptionsSuccessStatus: http.StatusOK,
+	}
+	if conf.AllowCredentials && slices.Contains(origins, "*") {
+		options.AllowOriginFunc = func(string) bool { return true }
+	}
+	c := cors.New(options)
+	handler := c.Handler(next)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Origin") != "" {
+			method := r.Method
+			if r.Method == http.MethodOptions && r.Header.Get("Access-Control-Request-Method") != "" {
+				method = r.Header.Get("Access-Control-Request-Method")
+			}
+			method = strings.ToUpper(method)
+			if !c.OriginAllowed(r) || (method != http.MethodOptions && !slices.Contains(methods, method)) {
+				w.Header().Add("Vary", "Origin")
+				http.Error(w, http.StatusText(http.StatusForbidden), http.StatusForbidden)
+
+				return
+			}
+		}
+		handler.ServeHTTP(w, r)
+	})
+}
+
+// router returns the handler serving all endpoints of the service.
+func (auth AuthHandler) router(corsConf config.CORSConfig) http.Handler {
+	mux := http.NewServeMux()
+
+	mux.Handle("GET /public/", http.StripPrefix("/public/", http.FileServer(filesOnly{http.Dir(auth.staticDir)})))
+
+	mux.HandleFunc("GET /{$}", addCSPheaders(auth.getMain))
+	mux.HandleFunc("GET /login-options", auth.getLoginOptions)
+
+	// EGA endpoints
+	mux.HandleFunc("POST /ega", auth.postEGA)
+	mux.HandleFunc("GET /ega/s3conf", auth.getEGAConf)
+	mux.HandleFunc("GET /ega/login", addCSPheaders(auth.getEGALogin))
+
+	// OIDC endpoints
+	mux.HandleFunc("GET /oidc", auth.getOIDC)
+	mux.HandleFunc("GET /oidc/s3conf-inbox", auth.getOIDCConfInbox)
+	mux.HandleFunc("GET /oidc/s3conf-download", auth.getOIDCConfDownload)
+	mux.HandleFunc("GET /oidc/login", auth.getOIDCLogin)
+	mux.HandleFunc("GET /oidc/cors_login", auth.getOIDCCORSLogin)
+
+	// Endpoint for client login info
+	mux.HandleFunc("GET /info", auth.getInfo)
+
+	handler := globalHeaders(rejectHead(mux))
+
+	if corsConf.AllowOrigin != "" {
+		handler = corsHandler(corsConf, handler)
+	}
+
+	return otelhttp.NewMiddleware("http-server")(handler)
 }
 
 func main() {
@@ -457,29 +616,16 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
+		secure:       secureCookies(conf.Server, conf.Auth.OIDC),
 	}
+	// Sessions only carry flash messages from one request to the next
+	authHandler.sessions = newSessionStore(10*time.Minute, authHandler.secure)
+	go authHandler.sessions.expireLoop(ctx)
 
-	// Initialise web server
-	app := iris.New()
-
-	// Start sessions handler in order to send flash messages
-	sess := sessions.New(sessions.Config{Cookie: "_session_id", AllowReclaim: true})
-
-	if conf.Server.CORS.AllowOrigin != "" {
-		// Set CORS context
-		corsContext := cors.New(cors.Options{
-			AllowedOrigins:   strings.Split(conf.Server.CORS.AllowOrigin, ","),
-			AllowedMethods:   strings.Split(conf.Server.CORS.AllowMethods, ","),
-			AllowCredentials: conf.Server.CORS.AllowCredentials,
-		})
-		app.Use(corsContext)
+	authHandler.templates, err = template.ParseGlob(filepath.Join(authHandler.htmlDir, "*.html"))
+	if err != nil {
+		log.Panicf("Failed to parse templates: %s", err.Error())
 	}
-
-	app.Use(sess.Handler())
-	otelMiddleware := otelhttp.NewMiddleware("http-server")
-	app.WrapRouter(func(w http.ResponseWriter, r *http.Request, router http.HandlerFunc) {
-		otelMiddleware(router).ServeHTTP(w, r)
-	})
 
 	// Connect to DB
 	authHandler.db, err = postgres.NewPostgresSQLDatabase(ctx)
@@ -499,50 +645,50 @@ func main() {
 	}
 	defer authHandler.db.Close()
 
-	app.RegisterView(iris.HTML(authHandler.htmlDir, ".html"))
-	app.HandleDir("/public", iris.Dir(authHandler.staticDir))
-
-	app.Get("/", addCSPheaders, authHandler.getMain)
-	app.Get("/login-options", authHandler.getLoginOptions)
-
-	// EGA endpoints
-	app.Post("/ega", authHandler.postEGA)
-	app.Get("/ega/s3conf", authHandler.getEGAConf)
-	app.Get("/ega/login", addCSPheaders, authHandler.getEGALogin)
-
-	// OIDC endpoints
-	app.Get("/oidc", authHandler.getOIDC)
-	app.Get("/oidc/s3conf-inbox", authHandler.getOIDCConfInbox)
-	app.Get("/oidc/s3conf-download", authHandler.getOIDCConfDownload)
-	app.Get("/oidc/login", authHandler.getOIDCLogin)
-	app.Get("/oidc/cors_login", authHandler.getOIDCCORSLogin)
-
 	authHandler.pubKey, err = readPublicKeyFile(authHandler.Config.PublicFile)
 	if err != nil {
 		log.Panicf("Failed to read public key: %s", err.Error())
 	}
 
-	// Endpoint for client login info
-	app.Get("/info", authHandler.getInfo)
+	server := &http.Server{
+		Addr:              "0.0.0.0:8080",
+		Handler:           authHandler.router(conf.Server.CORS),
+		ReadTimeout:       5 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       30 * time.Second,
+		ReadHeaderTimeout: 3 * time.Second,
+	}
 
-	app.UseGlobal(globalHeaders)
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGINT, syscall.SIGTERM)
+
+	serverErr := make(chan error, 1)
+	go func() {
+		var err error
+		if conf.Server.Cert != "" && conf.Server.Key != "" {
+			log.Infoln("Serving content using https")
+			err = server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key)
+		} else {
+			log.Infoln("Serving content using http")
+			err = server.ListenAndServe()
+		}
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
 
 	startupSpan.End()
-	if conf.Server.Cert != "" && conf.Server.Key != "" {
-		log.Infoln("Serving content using https")
-		err = app.Run(iris.TLS("0.0.0.0:8080", conf.Server.Cert, conf.Server.Key))
-	} else {
-		log.Infoln("Serving content using http")
-		server := &http.Server{
-			Addr:              "0.0.0.0:8080",
-			ReadTimeout:       5 * time.Second,
-			WriteTimeout:      5 * time.Second,
-			IdleTimeout:       30 * time.Second,
-			ReadHeaderTimeout: 3 * time.Second,
-		}
-		err = app.Run(iris.Server(server))
-	}
-	if err != nil {
+
+	select {
+	case sig := <-sigc:
+		log.Infof("received shutdown signal: %s", sig)
+	case err := <-serverErr:
 		log.Error("Failed to start server:", err)
+	}
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Errorf("server shutdown error: %v", err)
 	}
 }

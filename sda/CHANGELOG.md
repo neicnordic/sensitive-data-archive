@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- auth: replace the unmaintained Iris web framework with `net/http`, which unblocks the move to Go 1.27. Routes, templates and configuration are unchanged. The `_session_id` cookie is now only set when there is a message or s3cmd config to carry to the next request, it expires after 10 minutes instead of never, and it is marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https; previously every request, including probes, started a session that was kept in memory for the lifetime of the pod. CORS preflight requests are now answered when `cors.origins` is set, a request with the wrong method, including `HEAD`, gets `405` instead of `404`, a path with a trailing slash such as `/oidc/` gets `404` instead of a redirect, and the HTTPS server now has the same timeouts as the HTTP one, with a 30 second write timeout for both.
+- auth: the `state` cookie is only marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https, so the OIDC login works over plain HTTP (#1101).
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
 
 ### Fixed
