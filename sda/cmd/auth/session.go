@@ -44,7 +44,7 @@ func (s *sessionStore) SetFlash(w http.ResponseWriter, r *http.Request, key stri
 		sess = &session{flashes: map[string]any{}}
 		s.sessions[id] = sess
 		// Later calls for the same request must find this session.
-		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id})
+		r.AddCookie(&http.Cookie{Name: sessionCookieName, Value: id}) // #nosec G124 -- added to the incoming request only, never sent to a client
 	}
 	sess.expires = s.now().Add(s.ttl)
 	sess.flashes[key] = value
