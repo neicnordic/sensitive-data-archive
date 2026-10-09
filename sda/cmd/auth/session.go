@@ -25,11 +25,14 @@ type sessionStore struct {
 	mu       sync.Mutex
 	sessions map[string]*session
 	ttl      time.Duration
+	secure   bool
 	now      func() time.Time
 }
 
-func newSessionStore(ttl time.Duration) *sessionStore {
-	return &sessionStore{sessions: map[string]*session{}, ttl: ttl, now: time.Now}
+// newSessionStore returns a store whose sessions live for ttl. secure sets
+// the Secure attribute on the session cookie, see secureCookies.
+func newSessionStore(ttl time.Duration, secure bool) *sessionStore {
+	return &sessionStore{sessions: map[string]*session{}, ttl: ttl, secure: secure, now: time.Now}
 }
 
 // SetFlash stores a value under key in the session of the request, and starts
@@ -56,12 +59,12 @@ func (s *sessionStore) SetFlash(w http.ResponseWriter, r *http.Request, key stri
 			return
 		}
 	}
-	http.SetCookie(w, &http.Cookie{
+	http.SetCookie(w, &http.Cookie{ // #nosec G124 -- Secure follows the configured scheme, see secureCookies
 		Name:     sessionCookieName,
 		Value:    id,
 		Path:     "/",
 		MaxAge:   int(s.ttl.Seconds()),
-		Secure:   true,
+		Secure:   s.secure,
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 	})

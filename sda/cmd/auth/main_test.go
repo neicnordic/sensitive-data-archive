@@ -89,6 +89,38 @@ func TestGetOIDCKeepsRedirectURIWithAcrValues(t *testing.T) {
 	assert.Equal(t, "https://refeds.org/profile/mfa", query.Get("acr_values"), "acr_values was dropped when a redirect_uri was given")
 }
 
+func TestSecureCookies(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		server config.ServerConfig
+		oidc   config.OIDCConfig
+		secure bool
+	}{
+		{"serves TLS", config.ServerConfig{Cert: "cert.pem", Key: "key.pem"}, config.OIDCConfig{}, true},
+		{"TLS in front", config.ServerConfig{}, config.OIDCConfig{RedirectURL: "https://auth.example/oidc/login"}, true},
+		{"plain HTTP", config.ServerConfig{}, config.OIDCConfig{RedirectURL: "http://localhost:8080/oidc/login"}, false},
+		{"EGA only over HTTP", config.ServerConfig{}, config.OIDCConfig{}, false},
+		{"certificate without key", config.ServerConfig{Cert: "cert.pem"}, config.OIDCConfig{}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.secure, secureCookies(tc.server, tc.oidc))
+		})
+	}
+}
+
+func TestGetOIDCStateCookieFollowsScheme(t *testing.T) {
+	for _, secure := range []bool{true, false} {
+		authHandler := AuthHandler{secure: secure}
+		res := httptest.NewRecorder()
+		authHandler.getOIDC(res, httptest.NewRequest(http.MethodGet, "/oidc", nil))
+
+		cookies := res.Result().Cookies()
+		require.Len(t, cookies, 1)
+		assert.Equal(t, "state", cookies[0].Name)
+		assert.Equal(t, secure, cookies[0].Secure, "the state cookie must only be Secure when sda-auth is reached over HTTPS")
+	}
+}
+
 func TestLoginFailureMessage(t *testing.T) {
 	acrErr := fmt.Errorf("%w: acr %q returned, required one of [x]", ErrAcrNotAccepted, "y")
 	assert.Contains(t, loginFailureMessage(acrErr), "two factor authentication", "a rejected authentication context needs its own message")
@@ -132,7 +164,7 @@ func testRouter(t *testing.T, corsConf config.CORSConfig) (http.Handler, AuthHan
 	authHandler := AuthHandler{
 		htmlDir:   "frontend/templates",
 		staticDir: "frontend/static",
-		sessions:  newSessionStore(time.Minute),
+		sessions:  newSessionStore(time.Minute, false),
 	}
 	var err error
 	authHandler.templates, err = template.ParseGlob(filepath.Join(authHandler.htmlDir, "*.html"))

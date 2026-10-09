@@ -22,7 +22,7 @@ func sessionCookie(res *httptest.ResponseRecorder) *http.Cookie {
 }
 
 func TestFlashIsReadOnce(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, true)
 
 	res := httptest.NewRecorder()
 	store.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "key", "value")
@@ -39,8 +39,18 @@ func TestFlashIsReadOnce(t *testing.T) {
 	assert.Nil(t, store.PopFlash(req, "key"), "a flash can only be read once")
 }
 
+func TestSessionCookieNotSecureOverHTTP(t *testing.T) {
+	store := newSessionStore(time.Minute, false)
+
+	res := httptest.NewRecorder()
+	store.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "key", "value")
+	cookie := sessionCookie(res)
+	require.NotNil(t, cookie)
+	assert.False(t, cookie.Secure, "browsers drop Secure cookies that arrive over plain HTTP")
+}
+
 func TestFlashesInOneSessionAreIndependent(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 
 	res := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -55,7 +65,7 @@ func TestFlashesInOneSessionAreIndependent(t *testing.T) {
 }
 
 func TestFlashReusesExistingSession(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 
 	res := httptest.NewRecorder()
 	store.SetFlash(res, httptest.NewRequest(http.MethodGet, "/", nil), "first", "a")
@@ -75,7 +85,7 @@ func TestFlashReusesExistingSession(t *testing.T) {
 }
 
 func TestFlashWithoutSession(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 
 	assert.Nil(t, store.PopFlash(httptest.NewRequest(http.MethodGet, "/", nil), "key"))
 
@@ -85,7 +95,7 @@ func TestFlashWithoutSession(t *testing.T) {
 }
 
 func TestFlashSkipsUnknownSessionCookies(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 
 	// A cookie from before a restart, or one Iris set for the parent domain,
 	// comes first and points at no session.
@@ -106,7 +116,7 @@ func TestFlashSkipsUnknownSessionCookies(t *testing.T) {
 }
 
 func TestFlashExpires(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 	now := time.Now()
 	store.now = func() time.Time { return now }
 
@@ -120,7 +130,7 @@ func TestFlashExpires(t *testing.T) {
 }
 
 func TestRemoveExpired(t *testing.T) {
-	store := newSessionStore(time.Minute)
+	store := newSessionStore(time.Minute, false)
 	now := time.Now()
 	store.now = func() time.Time { return now }
 
