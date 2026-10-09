@@ -53,6 +53,16 @@ type AuthHandler struct {
 	db           database.Database
 	templates    *template.Template
 	sessions     *sessionStore
+	// secure sets the Secure attribute on the cookies, see secureCookies
+	secure bool
+}
+
+// secureCookies reports whether sda-auth is reached over HTTPS, either because
+// it serves TLS itself or because the OIDC redirect URL is https, which means
+// TLS is terminated in front of it. Browsers drop Secure cookies that arrive
+// over plain HTTP, which broke the login there, see #1101.
+func secureCookies(server config.ServerConfig, oidcConf config.OIDCConfig) bool {
+	return (server.Cert != "" && server.Key != "") || strings.HasPrefix(oidcConf.RedirectURL, "https://")
 }
 
 // render executes the named template with data and writes the result. The
@@ -264,7 +274,7 @@ func (auth AuthHandler) getEGAConf(w http.ResponseWriter, r *http.Request) {
 // getOIDC redirects to the oidc page defined in auth.Config
 func (auth AuthHandler) getOIDC(w http.ResponseWriter, r *http.Request) {
 	state := uuid.New()
-	http.SetCookie(w, &http.Cookie{Name: "state", Value: state.String(), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
+	http.SetCookie(w, &http.Cookie{Name: "state", Value: state.String(), Secure: auth.secure, HttpOnly: true, SameSite: http.SameSiteLaxMode}) // #nosec G124 -- Secure follows the configured scheme, see secureCookies
 
 	var authOptions []oauth2.AuthCodeOption
 
@@ -606,9 +616,10 @@ func main() {
 		htmlDir:      "./frontend/templates",
 		staticDir:    "./frontend/static",
 		pubKey:       "",
-		// Sessions only carry flash messages from one request to the next
-		sessions: newSessionStore(10 * time.Minute),
+		secure:       secureCookies(conf.Server, conf.Auth.OIDC),
 	}
+	// Sessions only carry flash messages from one request to the next
+	authHandler.sessions = newSessionStore(10*time.Minute, authHandler.secure)
 	go authHandler.sessions.expireLoop(ctx)
 
 	authHandler.templates, err = template.ParseGlob(filepath.Join(authHandler.htmlDir, "*.html"))

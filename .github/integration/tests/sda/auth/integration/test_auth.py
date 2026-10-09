@@ -85,9 +85,8 @@ class TestOIDCAuth(unittest.TestCase):
 
         redirect = session.get(self.backend_url, allow_redirects=False)
         self.assertEqual(redirect.status_code, 302)
-        # auth marks the state cookie Secure, which no client stores over plain
-        # http. A browser against a TLS deployment would send it back, so it is
-        # carried by hand on the callback below.
+        # The callback goes to the redirect URL on localhost, not to the host
+        # that set the state cookie, so it is carried by hand below.
         state = re.search(r"state=([^;]+)", redirect.headers["Set-Cookie"]).group(1)
 
         # Log in at the mocked AAI and approve the release of the attributes.
