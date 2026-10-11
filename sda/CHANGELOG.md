@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- postgresql: schema migration 24 fills `files.last_event` in committed batches, in physical table order, and records the schema version last, so an interrupted migration resumes instead of starting over; large databases can run the backfill before the upgrade, see `postgresql/data_migration.docs/24_pre_backfill_last_event.md`
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
 
 ### Fixed
