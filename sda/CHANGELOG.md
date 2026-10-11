@@ -25,6 +25,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
 - s3inbox: Check if the bucket exists before trying to create it.
 
+## [4.0.3] - 2026-10-09
+
+### Fixed
+
+- api: `GET /users/{username}/files` is much faster on large `files` tables; the `path_prefix` filter and the pagination cursor are now served by indexes instead of scanning every file of the user, or the whole table (on a 4.7M-row table, listing a folder of about 8,000 files went from 149 s to under 1 s)
+- api: a `path_prefix` containing non-ASCII characters (for example `å`, `ä`, `ö`) now matches files; it used to match nothing
+
+### Changed
+
+- [Added two indexes on `files` and bumped the schema version to 27](../postgresql/migratedb.d/27_add_indexes_on_files_for_user_file_listing.sql): `(submission_user, submission_file_path COLLATE "C")` and `(submission_user, id)`
+  - building them blocks writes to `files` (not reads); on a large table, create them beforehand with `CREATE INDEX CONCURRENTLY` under the same names, and the migration skips them
+  - the api still runs against schema 23 and later; without the indexes it is just slower
+
 ## [4.0.2] - 2026-09-30
 
 ### Fixed
