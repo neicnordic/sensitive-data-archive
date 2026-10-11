@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- postgresql: schema migration 24 fills `files.last_event` in committed batches, in physical table order, and records the schema version last, so an interrupted migration resumes instead of starting over; large databases can run the backfill before the upgrade, see `postgresql/data_migration.docs/24_pre_backfill_last_event.md`
+
 ## [4.1.0] - 2026-11-03
 
 ### Added
