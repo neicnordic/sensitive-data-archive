@@ -84,6 +84,13 @@ The file naming convention is as follows: `${SCHEMA_VERSION}_${pre/post}_${SHORT
 Before upgrading the schema, check whether any data migrations are required for the schema versions you plan to apply.
 Apply any **pre** data migrations **before** running the corresponding schema migration, and any **post** data migrations **after** it.
 
+Mind the size of the database. The entrypoint runs the migration scripts before the server accepts TCP connections,
+and the `sda-db` chart's liveness probe connects over TCP, so under Kubernetes a migration that takes longer than
+about a minute gets the pod killed and restarted. A migration that rewrites a large table (version 24 fills
+`files.last_event` for every row) therefore belongs in a **pre** data migration on large databases, run by hand from
+inside the database container over the Unix socket, never through a port-forward or a load balancer that drops a
+long idle connection.
+
 Recommended sequence when deploying:
 
 1. Check the currently applied schema version and the target schema version after deployment.
