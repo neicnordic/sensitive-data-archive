@@ -58,14 +58,14 @@ spec:
           value: {{ include "confFile" . }}
         - name: CONFIG_FILE
           value: {{ include "confFile" . }}
-        {{- range $name, $value := .Values.global.observability }}
+        {{- range $name, $value := .Values.global.observability.env }}
         - name: {{ $name }}
           value: {{ $value | quote }}
         {{- end }}
-        {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+        {{- if eq "prometheus" .Values.global.observability.env.OTEL_METRICS_EXPORTER }}
         ports:
           - name: prometheus
-            containerPort: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+            containerPort: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
             protocol: TCP
         {{- end }}
         resources:
