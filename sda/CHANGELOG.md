@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- postgresql: the entrypoint logs how long each migration script takes and appends one line per script run to `migration_timings.log` in `PGDATA`
+
 ### Changed
 
 - postgresql: schema migration 24 fills `files.last_event` in committed batches, in physical table order, and records the schema version last, so an interrupted migration resumes instead of starting over; large databases can run the backfill before the upgrade, see `postgresql/data_migration.docs/24_pre_backfill_last_event.md`
