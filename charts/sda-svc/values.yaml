@@ -110,9 +110,10 @@ global:
     internalNamespace: ""
     ingressNamespace: ""
     ingressLabelMatch: ""
-    # @param global.networkPolicy.prometheusNamespace the namespace to allow promethues scraping from, required if network policy creation and prometheus exporting enabled
+    # @param global.networkPolicy.prometheusNamespace the namespace to allow prometheus scraping from, required if network policy creation and prometheus exporting enabled
     prometheusNamespace: ""
     # @param global.networkPolicy.otlpNamespace the namespace to allow otlp egress to, required if network policy creation and otlp tracing exporting enabled
+    # Note, the created network policy only allows the default OTLP ports: 4317, and 4318, if other custom ports are used, another network policy needs to be applied to allow these ports
     otlpNamespace: ""
     # @param global.networkPolicy.otlpPodLabelMatch the pod labels to allow otlp egress to
     otlpPodLabelMatch: ""
