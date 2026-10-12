@@ -92,4 +92,32 @@ spec:
           port: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
 ---
 {{- end }}
+{{- if eq "otlp" .Values.global.observability.env.OTEL_TRACES_EXPORTER }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-otlp-egress
+  namespace: {{ .Release.Namespace }}
+spec:
+  podSelector:
+    matchLabels:
+      release: {{ .Release.Name }}
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ required "global.networkPolicy.otlpNamespace is required when otlp trace exporter enabled" .Values.global.networkPolicy.otlpNamespace | quote }}
+          podSelector:
+            matchLabels:
+              {{ .Values.global.networkPolicy.otlpPodLabelMatch | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 4318
+        - protocol: TCP
+          port: 4317
+---
+{{- end }}
 {{- end }}
