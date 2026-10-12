@@ -83,7 +83,7 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.global.networkPolicy.prometheusNamespace }}
+              kubernetes.io/metadata.name: {{ required "global.networkPolicy.prometheusNamespace is required when Prometheus metrics are enabled" .Values.global.networkPolicy.prometheusNamespace | quote }}
       ports:
         - protocol: TCP
           port: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
