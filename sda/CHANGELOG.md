@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - postgresql: Add new index on file_dataset(dataset_id, id)
 - database: Add new func ListDatasetFiles
   - Replaces both GetDatasetFiles, and GetDatasetFileIDs by calling ListDatasetFiles with limit 0 to get full result 
+- api: new API "/dataset/{datasetID}/files/{accessionID}" to request a file to be removed from a dataset
 
 ### Changed
 
