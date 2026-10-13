@@ -622,7 +622,8 @@ func (ts *ReaderTestSuite) TestNewFileSeekReader_ReadFrom2Bucket1() {
 
 	content := make([]byte, lenToRead)
 
-	read, err := fileSeekReader.Read(content)
+	// Read may return 0, nil while a prefetch for this range is in flight; ReadFull retries
+	read, err := io.ReadFull(fileSeekReader, content)
 	ts.NoError(err)
 	ts.Equal(lenToRead, int64(read))
 
