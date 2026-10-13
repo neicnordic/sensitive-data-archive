@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add tracing in the storage reader/writer libraries for s3 and posix
 - Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
   - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
+- api: new API "/dataset/{datasetID}/files/{accessionID}" to request a file to be removed from a dataset
+
 
 ### Changed
 
