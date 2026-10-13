@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add tracing in the storage reader/writer libraries for s3 and posix
 - Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
   - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
+- api: add new API `/dataset/{datasetID}/files` to list files in a dataset
 
 ### Changed
 
