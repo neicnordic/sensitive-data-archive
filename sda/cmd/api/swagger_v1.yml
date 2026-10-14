@@ -115,6 +115,7 @@ paths:
         List the files in a dataset.
         The results are not guaranteed to be consistent across pages if files
         are added to or removed from the dataset during pagination.
+        Files are ordered by the order they were added to the dataset.
       operationId: listDatasetFiles
       parameters:
         - in: path
@@ -163,7 +164,7 @@ paths:
                       example: zz-File-123456-qwerty
                     path:
                       type: string
-                      description: Dataset relative file path
+                      description: Dataset download-path override, or the original submission file path when no override is configured
                       example: "zz-Dataset-123456-asdfgh/files/zz-File-123456-asdfgh_file.c4gh"
                     createdAt:
                       type: string
@@ -173,10 +174,7 @@ paths:
                     size:
                       type: integer
                       format: int64
-                      description: |
-                        Encrypted file size in bytes (Crypt4GH bytes as stored in the archive,
-                        excluding the re-encrypted header). The actual download size will be
-                        slightly larger due to the recipient-specific Crypt4GH header.
+                      description: Encrypted file size in the archive storage in bytes  
                       example: 56623104
                     decryptedSize:
                       type: integer
