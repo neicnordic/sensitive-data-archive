@@ -151,6 +151,7 @@ paths:
                     - path
                     - createdAt
                     - size
+                    - decryptedSize
                     - checksums
                   properties:
                     id:
@@ -171,8 +172,16 @@ paths:
                       format: date-time
                     size:
                       type: integer
-                      description: Decrypted (plaintext) file size in bytes
                       format: int64
+                      description: |
+                        Encrypted file size in bytes (Crypt4GH bytes as stored in the archive,
+                        excluding the re-encrypted header). The actual download size will be
+                        slightly larger due to the recipient-specific Crypt4GH header.
+                      example: 56623104
+                    decryptedSize:
+                      type: integer
+                      format: int64
+                      description: Decrypted (plaintext) file size in bytes
                       example: 56600000
                     checksums:
                       type: array
