@@ -180,11 +180,12 @@ type functions interface {
 	// GetDecryptedChecksum gets the UNENCRYPTED checksum for a file ID
 	GetDecryptedChecksum(ctx context.Context, fileID string) (string, error)
 
-	// GetDatasetFiles returns all file accessionIDs in a dataset
-	GetDatasetFiles(ctx context.Context, datasetID string) ([]string, error)
-
-	// GetDatasetFileIDs returns all file IDs in a dataset
-	GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error)
+	// ListDatasetFiles retrieves a page of files in a dataset.
+	// It returns up to limit files when limit is positive; non-positive limits are
+	// treated as unbounded. When more results are available, it returns a
+	// non-empty nextCursor that can be passed to a subsequent call to continue
+	// listing from the next page.
+	ListDatasetFiles(ctx context.Context, datasetAccessionID string, limit int, cursor string) ([]*DatasetFileInfo, string, error)
 
 	// GetDatasetDetails returns details of the details of the dataset based on the datasetID, if dataset not found, will return nil, nil
 	GetDatasetDetails(ctx context.Context, datasetID string) (*DatasetDetails, error)

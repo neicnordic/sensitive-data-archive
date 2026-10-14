@@ -59,9 +59,18 @@ var (
 	datasetID         = "test-dataset-123"
 	accessionID       = "test-file-123"
 	decryptedChecksum = "a3f1c2d4e5b6789012345678abcdef901234567890abcdef1234567890abcdef"
-	datasetFileIDs    = []string{fileID}
-	datasetFiles      = []string{fileID}
-	userFiles         = []*database.SubmissionFileInfo{
+	datasetFiles      = []*database.DatasetFileInfo{
+		{
+			ID:            fileID,
+			AccessionID:   accessionID,
+			Path:          "inbox",
+			Size:          0,
+			DecryptedSize: 0,
+			CreatedAt:     "",
+			Checksums:     nil,
+		},
+	}
+	userFiles = []*database.SubmissionFileInfo{
 		{AccessionID: accessionID, FileID: fileID},
 	}
 	userDatasets       = []*database.DatasetInfo{{DatasetID: datasetID, Status: "status", Timestamp: "time"}}
@@ -208,11 +217,10 @@ func setup() error {
 	mockDB.On("GetUploadedSubmissionFilePathAndLocation", userID, fileID).Return("inbox", "inbox", nil)
 	mockDB.On("GetDatasetStatus", datasetID).Return("registered", nil)
 	mockDB.On("GetDecryptedChecksum", fileID).Return(decryptedChecksum, nil)
-	mockDB.On("GetDatasetFileIDs", datasetID).Return(datasetFileIDs, nil)
-	mockDB.On("GetDatasetFiles", datasetID).Return(datasetFiles, nil)
-	mockDB.On("GetReVerificationData", fileID).Return(reverificationData, nil)
+	mockDB.On("GetReVerificationData", accessionID).Return(reverificationData, nil)
 	mockDB.On("GetMappingData", datasetID).Return(mappingData, nil)
 	mockDB.On("ListUserDatasets", userID).Return(userDatasets, nil)
+	mockDB.On("ListDatasetFiles", datasetID, mock.Anything, mock.Anything).Return(datasetFiles, "", nil)
 	mockDB.On("ListDatasets").Return(userDatasets, nil)
 	mockDB.On("CheckIfDatasetExists", datasetID).Return(true, nil)
 	mockDB.On("ListActiveUsers").Return([]string{userID}, nil)
@@ -470,6 +478,185 @@ func TestListDatasets(t *testing.T) {
 	}
 }
 
+func TestListDatasetFiles(t *testing.T) {
+	tests := []struct {
+		name               string
+		datasetAccessionID string
+		limit              string
+		cursor             string
+		newMockDB          func() *mocks.MockDatabase
+		expectedNextCursor bool
+		expectedStatusCode int
+	}{
+		{
+			name:               "NoFiles",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDb := &mocks.MockDatabase{}
+				mockDb.On("CheckIfDatasetExists", "aa-Dataset-123_test").Return(true, nil).Once()
+				mockDb.On("ListDatasetFiles", "aa-Dataset-123_test", 1000, "").Return([]*database.DatasetFileInfo{}, "", nil).Once()
+
+				return mockDb
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusOK,
+		}, {
+			name:               "1Page",
+			datasetAccessionID: "aa-Dataset-123_test",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDb := &mocks.MockDatabase{}
+				mockDb.On("CheckIfDatasetExists", "aa-Dataset-123_test").Return(true, nil).Once()
+				mockDb.On("ListDatasetFiles", "aa-Dataset-123_test", 1000, "").Return([]*database.DatasetFileInfo{
+					{
+						ID:            "",
+						AccessionID:   "",
+						Path:          "",
+						Size:          0,
+						DecryptedSize: 0,
+						CreatedAt:     "",
+						Checksums:     nil,
+					},
+				}, "", nil).Once()
+
+				return mockDb
+			},
+			expectedStatusCode: http.StatusOK,
+		}, {
+			name:               "HasNextPage",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "1",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDb := &mocks.MockDatabase{}
+				mockDb.On("CheckIfDatasetExists", "aa-Dataset-123_test").Return(true, nil).Once()
+				mockDb.On("ListDatasetFiles", "aa-Dataset-123_test", 1, "").Return([]*database.DatasetFileInfo{
+					{
+						ID:            "",
+						AccessionID:   "",
+						Path:          "",
+						Size:          0,
+						DecryptedSize: 0,
+						CreatedAt:     "",
+						Checksums:     nil,
+					},
+				}, "next_cursor", nil).Once()
+
+				return mockDb
+			},
+			expectedNextCursor: true,
+			expectedStatusCode: http.StatusOK,
+		}, {
+			name:               "2ndPage",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "100",
+			cursor:             "cursor",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDb := &mocks.MockDatabase{}
+				mockDb.On("CheckIfDatasetExists", "aa-Dataset-123_test").Return(true, nil).Once()
+				mockDb.On("ListDatasetFiles", "aa-Dataset-123_test", 100, "cursor").Return([]*database.DatasetFileInfo{
+					{
+						ID:            "",
+						AccessionID:   "",
+						Path:          "",
+						Size:          0,
+						DecryptedSize: 0,
+						CreatedAt:     "",
+						Checksums:     nil,
+					},
+				}, "", nil).Once()
+
+				return mockDb
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusOK,
+		}, {
+			name:               "InvalidLimit_Negative",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "-1",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				return &mocks.MockDatabase{}
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusBadRequest,
+		}, {
+			name:               "InvalidLimit_AboveMaximum",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "99999999",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				return &mocks.MockDatabase{}
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusBadRequest,
+		}, {
+			name:               "InvalidLimit_NaN",
+			datasetAccessionID: "aa-Dataset-123_test",
+			limit:              "nan",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				return &mocks.MockDatabase{}
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusBadRequest,
+		}, {
+			name:               "DatasetNotFound",
+			datasetAccessionID: "not_found",
+			limit:              "",
+			cursor:             "",
+			newMockDB: func() *mocks.MockDatabase {
+				mockDb := &mocks.MockDatabase{}
+				mockDb.On("CheckIfDatasetExists", "not_found").Return(false, nil).Once()
+
+				return mockDb
+			},
+			expectedNextCursor: false,
+			expectedStatusCode: http.StatusNotFound,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			call := fmt.Sprintf("/dataset/%s/files", tc.datasetAccessionID)
+			var queryArgs []string
+			if tc.cursor != "" {
+				queryArgs = append(queryArgs, "cursor="+tc.cursor)
+			}
+			if tc.limit != "" {
+				queryArgs = append(queryArgs, "limit="+tc.limit)
+			}
+
+			call += "?"
+			for _, arg := range queryArgs {
+				call += arg + "&"
+			}
+			call = call[:len(call)-1]
+
+			mockDB := tc.newMockDB()
+
+			apiImpl := &API{
+				db: mockDB,
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("GET /dataset/{datasetid}/files", apiImpl.listDatasetFiles)
+
+			r, w := newRequest(t, http.MethodGet, call, nil, "")
+			mux.ServeHTTP(w, r)
+
+			_, err := io.ReadAll(w.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedStatusCode, w.Code)
+			if tc.expectedNextCursor {
+				assert.NotEmpty(t, w.Header().Get("X-Next-Cursor"))
+			}
+
+			mockDB.AssertExpectations(t)
+		})
+	}
+}
+
 func TestListAllDatasets(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -604,7 +791,7 @@ func TestVerifyFile(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			r, w := newRequest(t, http.MethodPut, "/file/verify/", tc.body, tc.token)
-			r.SetPathValue("accession", fileID)
+			r.SetPathValue("accession", accessionID)
 			api.rbac(api.verifyFile)(w, r)
 			assert.Equal(t, tc.wantCode, w.Code)
 		})
