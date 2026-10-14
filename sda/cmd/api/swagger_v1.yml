@@ -159,11 +159,11 @@ paths:
                       format: uuid
                     accessionID:
                       type: string
-                      example: zz-file-123456-qwerty
+                      example: zz-File-123456-qwerty
                     path:
                       type: string
                       description: Dataset relative file path
-                      example: "dataset1/files/zz-file-123456-asdfgh_file.c4gh"
+                      example: "zz-Dataset-123456-asdfgh/files/zz-File-123456-asdfgh_file.c4gh"
                     createdAt:
                       type: string
                       description: Date file was created in the repository
@@ -691,24 +691,24 @@ components:
       type: object
       properties:
         accession_ids:
-          example: ["zz-file-123456-asdfgh", "zz-file-123456-qwerty"]
+          example: ["zz-File-123456-asdfgh", "zz-File-123456-qwerty"]
           type: array
           items:
             type: string
         dataset_id:
           type: string
-          example: zz-dataset-123456-asdfgh
+          example: zz-Dataset-123456-asdfgh
         file_download_paths:
           type: object
           additionalProperties:
             type: string
-          example: {"zz-file-123456-asdfgh": "dataset1/files/zz-file-123456-asdfgh_file.c4gh", "zz-file-123456-qwerty": "dataset1/files/zz-file-123456-qwerty_file.c4gh"}
+          example: {"zz-File-123456-asdfgh": "zz-Dataset-123456-asdfgh/files/zz-File-123456-asdfgh_file.c4gh", "zz-File-123456-qwerty": "zz-Dataset-123456-asdfgh/files/zz-File-123456-qwerty_file.c4gh"}
     DatasetInfo:
       type: object
       properties:
         DatasetId:
           type: string
-          example: zz-dataset-123456-asdfgh
+          example: zz-Dataset-123456-asdfgh
         Status:
           type: string
           example: registered
@@ -720,7 +720,7 @@ components:
       properties:
         accession_id:
           type: string
-          example: zz-file-123456-zxcvbn
+          example: zz-File-123456-zxcvbn
         filepath:
           type: string
           example: uploads/file-1.c4gh
