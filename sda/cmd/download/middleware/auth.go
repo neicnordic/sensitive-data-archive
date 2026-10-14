@@ -60,6 +60,9 @@ type AuthContext struct {
 // jwksMinRefreshInterval bounds how often the JWKS is refetched on unknown key IDs.
 const jwksMinRefreshInterval = time.Minute
 
+// jwksFetchTimeout bounds a JWKS fetch, including reading the response body.
+var jwksFetchTimeout = 10 * time.Second
+
 // Authenticator validates JWT tokens.
 type Authenticator struct {
 	Keyset jwk.Set
@@ -222,10 +225,11 @@ func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
 		return fmt.Errorf("invalid JWKS URL: %s", jwksURL)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), jwksFetchTimeout)
 	defer cancel()
 
-	keySet, err := jwk.Fetch(ctx, jwksURL)
+	// The fetcher ignores ctx for the HTTP request, so the client timeout is what bounds a stalled response.
+	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(&http.Client{Timeout: jwksFetchTimeout}))
 	if err != nil {
 		return fmt.Errorf("failed to fetch JWKS: %w", err)
 	}

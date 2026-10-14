@@ -174,6 +174,33 @@ func TestVerifyJWT_RefetchIsRateLimited(t *testing.T) {
 	assert.Equal(t, int32(3), srv.hits.Load())
 }
 
+func TestLoadKeysFromURL_StalledBodyTimesOut(t *testing.T) {
+	orig := jwksFetchTimeout
+	jwksFetchTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { jwksFetchTimeout = orig })
+
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-release // headers sent, body never arrives
+	}))
+	t.Cleanup(srv.Close)
+	t.Cleanup(func() { close(release) })
+
+	a := &Authenticator{Keyset: jwk.NewSet()}
+	done := make(chan error, 1)
+	go func() { done <- a.loadKeysFromURL(srv.URL) }()
+
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("JWKS fetch did not time out on a stalled response body")
+	}
+}
+
 func TestVerifyJWT_RefetchFailureKeepsKeys(t *testing.T) {
 	ensureTestConfig(t)
 	exp := time.Now().Add(time.Hour)
