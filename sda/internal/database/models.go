@@ -1,6 +1,8 @@
 package database
 
-import "database/sql"
+import (
+	"database/sql"
+)
 
 type FileInfo struct {
 	Size              int64
@@ -47,6 +49,21 @@ type SubmissionFileInfo struct {
 	Status             string
 	SubmissionFileSize int64
 	CreatedAt          string
+}
+
+type DatasetFileInfo struct {
+	ID            string
+	AccessionID   string
+	Path          string
+	Size          int64
+	DecryptedSize int64
+	CreatedAt     string
+	Checksums     []*Checksum
+}
+
+type Checksum struct {
+	Type     string `json:"type"`
+	Checksum string `json:"checksum"`
 }
 
 type DatasetDetails struct {
