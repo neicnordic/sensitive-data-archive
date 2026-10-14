@@ -39,7 +39,10 @@ The service uses structure-based detection to classify tokens:
 
 Tokens with three dot-separated base64url segments (valid JSON header and payload)
 are treated as JWTs. They are validated locally against public keys loaded from
-`jwt.pubkey-path` or fetched from `jwt.pubkey-url`. If `oidc.issuer` is configured,
+`jwt.pubkey-path` or fetched from `jwt.pubkey-url`. When a JWT's `kid` is not in
+the loaded key set (e.g. after issuer key rotation), the JWKS is refetched from
+`jwt.pubkey-url`, at most once per minute, and verification is retried once.
+Keys from `jwt.pubkey-path` are always kept. If `oidc.issuer` is configured,
 the JWT `iss` claim must match. JWT validation failures are final — there is no
 userinfo fallback.
 
