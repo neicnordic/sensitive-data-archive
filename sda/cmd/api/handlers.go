@@ -30,6 +30,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -740,7 +741,7 @@ func (api *API) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	fileID := r.PathValue("fileid")
 	if _, err := uuid.Parse(fileID); err != nil {
-		span.Warn("invalid file ID", slog.String("file-id", fileID))
+		span.Warn("invalid file ID", slog.String("file_id", fileID))
 		writeJSON(w, http.StatusBadRequest, "invalid file id")
 
 		return
@@ -928,11 +929,14 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
+func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 	datasetID := r.PathValue("datasetid")
 
+	ctx, span := observability.StartSpan(r.Context(), "listDatasetFiles", attribute.String("dataset-id", datasetID))
+	defer span.End()
+
 	if datasetID == "" {
-		slog.Error("missing dataset id in request")
+		span.Warn("missing dataset id in request")
 		writeJSON(w, http.StatusBadRequest, ErrorResponse{
 			Error: http.StatusText(http.StatusBadRequest),
 		})
@@ -940,9 +944,98 @@ func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datasetDetails, err := api.db.GetDatasetDetails(r.Context(), datasetID)
+	// parse optional pagination params
+	limit, err := parseLimitParam(r.URL.Query().Get("limit"))
 	if err != nil {
-		slog.Error("failed to get dataset details", "error", err, "dataset_id", datasetID)
+		writeJSON(w, http.StatusBadRequest, "invalid limit")
+
+		return
+	}
+
+	datasetExists, err := api.db.CheckIfDatasetExists(ctx, datasetID)
+	if err != nil {
+		span.Error("failed to check dataset exists", err)
+		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
+			Error: http.StatusText(http.StatusInternalServerError),
+		})
+
+		return
+	}
+
+	if !datasetExists {
+		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+
+		return
+	}
+
+	cursor := r.URL.Query().Get("cursor")
+
+	datasetFiles, nextCursor, err := api.db.ListDatasetFiles(ctx, datasetID, limit, cursor)
+	if err != nil {
+		if errors.Is(err, database.ErrInvalidCursor) {
+			span.Error("invalid cursor parameter", err,
+				slog.String("cursor", cursor),
+				slog.Int("limit", limit),
+			)
+			writeJSON(w, http.StatusBadRequest, "invalid cursor parameter")
+
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+
+		return
+	}
+
+	if nextCursor != "" {
+		w.Header().Set("X-Next-Cursor", nextCursor)
+	}
+
+	rsp := make([]*datasetFileInfo, len(datasetFiles))
+
+	for i, f := range datasetFiles {
+		dfi := &datasetFileInfo{
+			ID:            f.ID,
+			AccessionID:   f.AccessionID,
+			Path:          f.Path,
+			CreatedAt:     f.CreatedAt,
+			Size:          f.Size,
+			DecryptedSize: f.DecryptedSize,
+			Checksums:     make([]*checksum, len(f.Checksums)),
+		}
+		for j, cs := range f.Checksums {
+			dfi.Checksums[j] = &checksum{
+				Type:     cs.Type,
+				Checksum: cs.Checksum,
+			}
+		}
+
+		rsp[i] = dfi
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(rsp)
+}
+
+func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
+	datasetID := r.PathValue("datasetid")
+
+	ctx, span := observability.StartSpan(r.Context(), "getDataset", attribute.String("dataset.id", datasetID))
+	defer span.End()
+
+	if datasetID == "" {
+		span.Warn("missing dataset id in request")
+		writeJSON(w, http.StatusBadRequest, ErrorResponse{
+			Error: http.StatusText(http.StatusBadRequest),
+		})
+
+		return
+	}
+
+	datasetDetails, err := api.db.GetDatasetDetails(ctx, datasetID)
+	if err != nil {
+		span.Error("failed to get dataset details", err)
 		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
 			Error: http.StatusText(http.StatusInternalServerError),
 		})
@@ -950,7 +1043,7 @@ func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if datasetDetails == nil {
-		slog.Error("dataset not found", "dataset_id", datasetID)
+		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
 		writeJSON(w, http.StatusNotFound, ErrorResponse{
 			Error: http.StatusText(http.StatusNotFound),
 		})
@@ -1057,19 +1150,20 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "releaseDataset")
+	datasetID := r.PathValue("datasetid")
+
+	ctx, span := observability.StartSpan(r.Context(), "releaseDataset", attribute.String("dataset_id", datasetID))
 	defer span.End()
 
-	datasetID := r.PathValue("datasetid")
 	ok, err := api.db.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
-		span.Error("failed to check if dataset exists", err, slog.String("dataset_id", datasetID))
+		span.Error("failed to check if dataset exists", err)
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if !ok {
-		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		span.Warn("dataset not found")
 		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
@@ -1077,13 +1171,13 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 
 	status, err := api.db.GetDatasetStatus(ctx, datasetID)
 	if err != nil {
-		span.Error("failed to get dataset status", err, slog.String("dataset_id", datasetID))
+		span.Error("failed to get dataset status", err)
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if status != "registered" {
-		span.Warn("dataset not registered", slog.String("dataset_id", datasetID), slog.String("status", status))
+		span.Warn("dataset not registered", slog.String("status", status))
 		writeJSON(w, http.StatusBadRequest, "dataset not ready for release")
 
 		return
@@ -1157,10 +1251,11 @@ func (api *API) rotateKeyFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) rotateKeyDataset(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "rotateKeyDataset")
+	datasetID := r.PathValue("datasetid")
+
+	ctx, span := observability.StartSpan(r.Context(), "rotateKeyDataset", attribute.String("dataset_id", datasetID))
 	defer span.End()
 
-	datasetID := r.PathValue("datasetid")
 	if datasetID == "" {
 		span.Warn("dataset id missing from request")
 		writeJSON(w, http.StatusBadRequest, "dataset id missing")
@@ -1170,40 +1265,40 @@ func (api *API) rotateKeyDataset(w http.ResponseWriter, r *http.Request) {
 
 	exists, err := api.db.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
-		span.Error("failed to check if dataset exists", err, slog.String("dataset_id", datasetID))
+		span.Error("failed to check if dataset exists", err)
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 	if !exists {
-		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		span.Warn("dataset not found")
 		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
 
-	files, err := api.db.GetDatasetFileIDs(ctx, datasetID)
+	files, _, err := api.db.ListDatasetFiles(ctx, datasetID, 0, "")
 	if err != nil {
-		span.Error("failed to get dataset files for dataset", err, slog.String("dataset_id", datasetID))
+		span.Error("failed to get dataset files for dataset", err)
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	if len(files) == 0 {
-		span.Warn("no files found for dataset", slog.String("dataset_id", datasetID))
+		span.Warn("no files found for dataset")
 		writeJSON(w, http.StatusBadRequest, "no files found for dataset")
 
 		return
 	}
-	for _, fileID := range files {
+	for _, file := range files {
 		rotateMsg := schema.KeyRotation{
 			Type:   "key_rotation",
-			FileID: fileID,
+			FileID: file.ID,
 		}
 		marshaledMsg, err := json.Marshal(&rotateMsg)
 		if err != nil {
-			span.Error("failed to marshal rotate key message", err, slog.String("dataset_id", datasetID), slog.String("file_id", fileID))
+			span.Error("failed to marshal rotate key message", err, slog.String("file_id", file.ID))
 			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
@@ -1225,7 +1320,7 @@ func (api *API) rotateKeyDataset(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	span.Info("rotation messages sent", slog.Int("nr_files", len(files)), slog.String("dataset_id", datasetID))
+	span.Info("rotation messages sent", slog.Int("nr_files", len(files)))
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -1559,29 +1654,30 @@ func (api *API) verifyFile(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) verifyDataset(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "verifyDataset")
+	datasetID := r.PathValue("dataset")
+
+	ctx, span := observability.StartSpan(r.Context(), "verifyDataset", attribute.String("dataset_id", datasetID))
 	defer span.End()
 
-	datasetID := r.PathValue("dataset")
-	files, err := api.db.GetDatasetFiles(ctx, datasetID)
+	files, _, err := api.db.ListDatasetFiles(ctx, datasetID, 0, "")
 	if err != nil {
-		span.Error("failed to get dataset files", err, slog.String("dataset_id", datasetID))
+		span.Error("failed to get dataset files", err)
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
 	}
 
 	if len(files) == 0 {
-		span.Warn("no files found for dataset", slog.String("dataset_id", datasetID))
+		span.Warn("no files found for dataset")
 		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
 
 		return
 	}
 
-	for _, accessionID := range files {
-		reverificationData, err := api.db.GetReVerificationData(ctx, accessionID)
+	for _, file := range files {
+		reverificationData, err := api.db.GetReVerificationData(ctx, file.AccessionID)
 		if err != nil {
-			span.Error("could not get reverification data from database", err, slog.String("accession_id", accessionID))
+			span.Error("could not get reverification data from database", err, slog.String("accession_id", file.AccessionID))
 			writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 			return
