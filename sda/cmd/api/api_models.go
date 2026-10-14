@@ -21,6 +21,20 @@ type submissionFileInfo struct {
 	SubmissionFileSize int64  `json:"submissionFileSize,omitempty"`
 	CreatedAt          string `json:"createdAt"`
 }
+type datasetFileInfo struct {
+	ID            string      `json:"id"`
+	AccessionID   string      `json:"accessionID"`
+	Path          string      `json:"path"`
+	CreatedAt     string      `json:"createdAt"`
+	Size          int64       `json:"size"`
+	DecryptedSize int64       `json:"decryptedSize"`
+	Checksums     []*checksum `json:"checksums"`
+}
+
+type checksum struct {
+	Type     string `json:"type"`
+	Checksum string `json:"checksum"`
+}
 
 type datasetInfo struct {
 	DatasetID string `json:"datasetID"`
