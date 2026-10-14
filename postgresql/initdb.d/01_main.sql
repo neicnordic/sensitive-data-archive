@@ -41,7 +41,8 @@ VALUES (0, now(), 'Created with version'),
        (24, now(), 'Add last_event column to files to avoid join on file_event_log'),
        (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading'),
        (26, now(), 'Add removed file event'),
-       (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id');
+       (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id'),
+       (28, now(), 'Add index on (dataset_id, id) on file_dataset table');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -172,6 +173,7 @@ CREATE TABLE file_dataset (
     CONSTRAINT unique_file_dataset UNIQUE(file_id, dataset_id),
     CONSTRAINT file_dataset_unique_download_path_dataset_idx UNIQUE (dataset_id, download_path)
 );
+CREATE INDEX file_dataset_dataset_id_id_idx ON sda.file_dataset (dataset_id, id);
 
 -- Keeps track of all events for the files, with timestamps and user_ids.
 CREATE TABLE file_event_log (
