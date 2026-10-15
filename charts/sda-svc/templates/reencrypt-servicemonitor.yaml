@@ -8,9 +8,6 @@ metadata:
   labels:
     app: {{ template "sda.fullname" . }}-reencrypt
     chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    component: {{ template "sda.fullname" . }}-reencrypt
-    release: {{ .Release.Name }}
-    heritage: {{ .Release.Service }}
     {{- if .Values.global.observability.serviceMonitor.labels }}
 {{ toYaml .Values.global.observability.serviceMonitor.labels | indent 4 }}
     {{- end }}

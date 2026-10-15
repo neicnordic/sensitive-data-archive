@@ -34,6 +34,8 @@ global:
       ## https://github.com/coreos/prometheus-operator
       ##
       enabled: false
+      # Note, the following labels are reserved by the helm chart, and should not be overridden
+      # "app", "chart"
       labels: {}
       annotations: {}
       # Set these to override the Prometheus global scrape interval/timeout.
