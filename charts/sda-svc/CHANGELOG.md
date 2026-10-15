@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `global.observability` Observability related variable configuration
     - Propagate `global.observability.env` values as environment variables to the applications, see https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables.
     - Add container and service ports if prometheus metrics exporter configured
-  - Add `.Values.global.networkPolicy.prometheusNamespace` to configure which namespaces are allowed to call prometheus ports on application if enabled
+  - Add `.Values.global.networkPolicy.prometheusNamespace` and `.Values.global.networkPolicy.prometheusPodLabelMatch` to configure which namespaces && pods are allowed to call prometheus ports on application if enabled
   - Add `global.observability.serviceMonitor` configurations to allow enabling prometheus service monitors to be deployed for the applications
     - Requires the [prometheus operators](https://github.com/prometheus-operator/prometheus-operator) CRDs to exist in the cluster prior to the helm install/upgrade
     - Requires `.Values.global.observability.env.OTEL_METRICS_EXPORTER` to be configured to "prometheus"
