@@ -14,4 +14,7 @@ var (
 
 	// ErrForeignKeyViolation indicates that an operation violates a foreign key constraint.
 	ErrForeignKeyViolation = errors.New("foreign-key violation")
+
+	// ErrNoRowsAffected indicates that an operation affected no rows.
+	ErrNoRowsAffected = errors.New("no rows affected")
 )
