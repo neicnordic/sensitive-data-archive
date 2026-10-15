@@ -1,0 +1,42 @@
+{
+    "title": "JSON schema for Local EGA dataset file removal message interface",
+    "$id": "https://github.com/neicnordic/sensitive-data-archive/tree/main/sda/schemas/federated/dataset-file_remocal.json",
+    "$schema": "http://json-schema.org/draft-07/schema",
+    "type": "object",
+    "required": [
+        "type",
+        "dataset_id",
+        "accession_id"
+    ],
+    "additionalProperties": true,
+    "properties": {
+        "type": {
+            "$id": "#/properties/type",
+            "type": "string",
+            "title": "The message type",
+            "description": "The message type",
+            "const": "file_removal"
+        },
+        "dataset_id": {
+            "$id": "#/properties/dataset_id",
+            "type": "string",
+            "title": "The Accession identifier for the dataset",
+            "description": "The Accession identifier for the dataset",
+            "examples": [
+                "anyidentifier"
+            ],
+            "minLength": 2
+        },
+        "accession_id": {
+            "$id": "#/properties/accession_id",
+            "type": "string",
+            "title": "The file accession id to be removed from the dataset",
+            "description": "The file accession id to be removed from the dataset",
+            "minLength": 2,
+            "pattern": "^\\S+$",
+            "examples": [
+                "anyidentifier"
+            ]
+        }
+    }
+}
