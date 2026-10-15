@@ -86,7 +86,7 @@ spec:
               kubernetes.io/metadata.name: {{ required "global.networkPolicy.prometheusNamespace is required when Prometheus metrics are enabled" .Values.global.networkPolicy.prometheusNamespace | quote }}
           podSelector:
             matchLabels:
-              app.kubernetes.io/name: prometheus
+              {{ .Values.global.networkPolicy.prometheusPodLabelMatch | nindent 14 }}
       ports:
         - protocol: TCP
           port: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
