@@ -158,6 +158,8 @@ func InitAuth() error {
 		if err := auth.loadKeysFromURL(pubKeyURL); err != nil {
 			return fmt.Errorf("failed to load JWT keys from URL: %w", err)
 		}
+		// Counts as a refresh, so an unknown kid right after startup does not refetch.
+		auth.lastRefresh = time.Now()
 		log.Infof("JWT keys loaded from URL: %s", pubKeyURL)
 	}
 
