@@ -435,4 +435,34 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.fil
 done
 echo "Finalize by using file ID finished successfully"
 
+filesInDataset="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/SYNC-001-12345" | jq '.numberOfFiles')"
+if [ "$filesInDataset" -ne 2 ]; then
+	echo "Error when getting SYNC-001-12345 dataset, expected it to have 2 files, got: $filesInDataset"
+	exit 1
+fi
+
+dataset_file_removal_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/dataset/SYNC-001-12345/SYNC-123-00003")"
+if [ "$dataset_file_removal_resp" != "202" ]; then
+    echo "Error when requesting to remove file from dataset, expected 202 got: $dataset_file_removal_resp"
+    exit 1
+fi
+
+echo "waiting for dataset file removal to complete"
+RETRY_TIMES=0
+until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/mappings | jq -r '."messages_ready"')" -eq 0 ]; do
+    echo "waiting for dataset file removal to complete"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset file removal to complete"
+        exit 1
+    fi
+    sleep 2
+done
+
+filesInDataset="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/SYNC-001-12345" | jq '.numberOfFiles')"
+if [ "$filesInDataset" -ne 1 ]; then
+  echo "Error when getting SYNC-001-12345 dataset after file removal, expected it to have 1 file, got: $filesInDataset"
+  exit 1
+fi
+
 echo "API admin tests completed successfully"

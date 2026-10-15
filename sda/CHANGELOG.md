@@ -16,7 +16,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
   - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
 - api: new API "/dataset/{datasetID}/files/{accessionID}" to request a file to be removed from a dataset
-
+- Add new schemas for dataset file removal messages
+- Add new database func: CheckIfFileInDataset to check if a file accession id is associated with a dataset accession id
+- Add new database func: RemoveFileFromDataset to remove associated between a file and a dataset
+- mapper: add handling of dataset file removal message
 
 ### Changed
 

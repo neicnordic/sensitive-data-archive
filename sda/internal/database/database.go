@@ -96,6 +96,8 @@ type functions interface {
 	// MapFileToDataset maps a file to a dataset in the database, provide a fileDownloadPathOverride to override the file submission path as the exposed download path
 	MapFileToDataset(ctx context.Context, datasetID, fileID string, fileDownloadPathOverride *string) error
 
+	RemoveFileFromDataset(ctx context.Context, datasetID, accessionID string) error
+
 	// GetInboxPath retrieves the submission_fie_path for a file with a given accessionID
 	GetInboxPath(ctx context.Context, accessionID string) (string, error)
 
@@ -124,6 +126,8 @@ type functions interface {
 
 	// CheckIfDatasetExists checks if a dataset already is registered
 	CheckIfDatasetExists(ctx context.Context, datasetID string) (bool, error)
+
+	CheckIfFileInDataset(ctx context.Context, datasetID, accessionID string) (bool, error)
 
 	// GetArchivePathAndLocation retrieves the archive_file_path and archive_location for a file with a given accessionID
 	GetArchivePathAndLocation(ctx context.Context, accessionID string) (string, string, error)
