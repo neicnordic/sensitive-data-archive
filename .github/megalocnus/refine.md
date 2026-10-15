@@ -44,7 +44,7 @@ needs answers
 One or two sentences.
 
 ### Acceptance criteria
-A checkbox list ending with "- [ ] Tests verifying the changes are added".
+A checkbox list. If tests can and should be written for this issue, end it with "- [ ] Tests verifying the changes are added".
 
 ### Proposed plan
 At most five steps, naming the files.
