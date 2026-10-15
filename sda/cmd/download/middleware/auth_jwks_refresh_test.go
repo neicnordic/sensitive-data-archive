@@ -99,8 +99,17 @@ func newURLAuthenticator(t *testing.T, url string, static jwk.Set) *Authenticato
 
 	a := &Authenticator{Keyset: static, staticKeys: static, jwksURL: url}
 	require.NoError(t, a.loadKeysFromURL(url))
+	a.lastRefresh = time.Now()
 
 	return a
+}
+
+// expireRefreshInterval lets the next unknown kid refetch, as if
+// jwksMinRefreshInterval had passed.
+func expireRefreshInterval(a *Authenticator) {
+	a.refreshMu.Lock()
+	a.lastRefresh = time.Time{}
+	a.refreshMu.Unlock()
 }
 
 func TestVerifyJWT_RefetchesJWKSOnUnknownKid(t *testing.T) {
@@ -123,6 +132,7 @@ func TestVerifyJWT_RefetchesJWKSOnUnknownKid(t *testing.T) {
 	// Issuer rotates: new key published after startup.
 	privB, pubB := newKidKeyPair(t, "b")
 	srv.addKey(t, pubB)
+	expireRefreshInterval(a)
 
 	_, err = a.verifyJWT(signWithKid(t, privB, "b", exp))
 	require.NoError(t, err)
@@ -146,6 +156,11 @@ func TestVerifyJWT_RefetchIsRateLimited(t *testing.T) {
 
 	_, err := a.verifyJWT(unknown)
 	require.Error(t, err)
+	assert.Equal(t, int32(1), srv.hits.Load(), "the startup fetch counts as a refresh")
+
+	expireRefreshInterval(a)
+	_, err = a.verifyJWT(unknown)
+	require.Error(t, err)
 	assert.Equal(t, int32(2), srv.hits.Load())
 
 	_, err = a.verifyJWT(unknown)
@@ -155,9 +170,7 @@ func TestVerifyJWT_RefetchIsRateLimited(t *testing.T) {
 	// Concurrent unknown-kid requests after the interval share one refetch.
 	privB, pubB := newKidKeyPair(t, "b")
 	srv.addKey(t, pubB)
-	a.refreshMu.Lock()
-	a.lastRefresh = time.Time{}
-	a.refreshMu.Unlock()
+	expireRefreshInterval(a)
 
 	tokenB := signWithKid(t, privB, "b", exp)
 	var wg sync.WaitGroup
@@ -210,6 +223,7 @@ func TestVerifyJWT_RefetchFailureKeepsKeys(t *testing.T) {
 	a := newURLAuthenticator(t, srv.URL, jwk.NewSet())
 
 	srv.setFail(true)
+	expireRefreshInterval(a)
 	privX, _ := newKidKeyPair(t, "x")
 	_, err := a.verifyJWT(signWithKid(t, privX, "x", exp))
 	require.Error(t, err)
