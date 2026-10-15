@@ -1,6 +1,6 @@
 ---
 status: exploring
-date: "2026-10-14"
+date: "2026-10-15"
 discussion: "https://github.com/neicnordic/sensitive-data-archive/pull/2655"
 authors:
    - "@jhagberg"
@@ -14,24 +14,25 @@ informed: []
 
 Many of our issues reach refinement half-specified, and the first part of every refinement is finding out what is unclear.
 Several of us already use Claude Code locally for that kind of work.
-This RFC proposes a four-week pilot where a Claude bot reads each new issue and the code it touches, and posts a plan with clarifying questions *before* the team refines it.
+This RFC proposes a four-week pilot where a Claude bot reads an issue and the code it touches, and posts a plan with clarifying questions *before* the team refines it.
 The bot writes no code; whoever picks up the issue implements it as usual.
 
 ## How the pilot works
 
 ```mermaid
 flowchart LR
-    new["Team member opens an issue<br/>or adds label <code>megalocnus</code>"] --> bot["Megalocnus reads the issue and the code<br/>(read-only, runs nothing)"]
+    new["Team member adds label <code>megalocnus</code>"] --> bot["Megalocnus reads the issue and the code<br/>(read-only, runs nothing)"]
     bot --> plan["Plan comment with<br/>numbered questions"]
     plan --> answer["Team answers in the issue"]
     answer -- "<code>@megalocnus replan</code>" --> bot
     plan --> refinement["Human refinement as usual"]
 ```
 
-* **Trigger:** a team member with write access opens an issue, adds the `megalocnus` label, or comments `@megalocnus replan`. Issues opened by people outside the team only get a plan if a team member adds the label.
-* **Output:** one comment per run, with the same headings every time: understanding, assumptions, numbered questions, proposed plan (files and steps), tests, size (S/M/L), impact on other repositories, and whether the issue is ready, needs answers, or should be split. A replan posts "Plan v2" and marks the old one as superseded.
+* **Trigger:** a team member with write access adds the `megalocnus` label or comments `@megalocnus replan`. Editing the issue does not trigger a new plan. During the pilot the bot does not comment on new issues by itself, so nobody gets notifications they did not ask for.
+* **Output:** one comment per run, under 300 words or so, following our issue templates: understanding (with a proposed user story if a feature lacks one), numbered questions, acceptance criteria as checkboxes ending with "Tests verifying the changes are added", a proposed plan, size (small/medium/big; priority stays with the team), overlapping open issues, impact on other repositories, and whether the issue is ready, needs answers, or should be split. A replan posts "Plan v2", "Plan v3" and so on.
+* **Feedback:** each plan asks for a 👍 or 👎 reaction, which is what we evaluate at the end of the pilot.
 * **Transparency:** comments come from `megalocnus[bot]` and end with a footer naming the model and saying that nothing has been changed and a human decides.
-* **Runs on** GitHub-hosted runners with Anthropic's official [`claude-code-action`](https://github.com/anthropics/claude-code-action). The `megalocnus` GitHub App is already registered by @viklund; the bot's instructions live in `.claude/commands/` and follow the repository's [`AGENTS.md`](https://github.com/neicnordic/sensitive-data-archive/pull/2662).
+* **Runs on** GitHub-hosted runners with the Claude Code CLI in restricted mode, where it can only read the checkout. The comment is posted afterwards by a separate step as `megalocnus[bot]`, using the App @viklund registered. The instructions are in `.github/megalocnus/refine.md` and follow the repository's `AGENTS.md`.
 
 ## Why plan-only first
 
@@ -43,20 +44,20 @@ A design for a second phase, where the bot also opens draft PRs after a human sa
 
 ## Cost and billing
 
-The pilot would run on @jhagberg's Claude Team seat, which Anthropic documents for GitHub Actions. Whether one person's seat may back a bot the whole team uses is not confirmed, so we should check that before starting or use a Console API key instead. About 40 issues a month are opened today, and a plan run is short.
+The pilot would run on @jhagberg's Claude Team seat, which Anthropic documents for GitHub Actions. Whether one person's seat may back a bot the whole team uses is not confirmed, so we should check that before starting or use a Console API key instead. In local test runs a plan took about 30 seconds, which would cost around 0.30 USD at API prices.
 
 ## Rollout
 
 1. `AGENTS.md` (#2662), so the bot and our local agents share the same repository conventions.
 2. This RFC.
-3. One workflow and one prompt file, tried in a sandbox repository first, then a PR here.
+3. One workflow and one prompt file, tried locally on real issues and then tested here after merge, since issue workflows only run from `main`.
 4. Four weeks; the sprint retrospective decides whether to continue, change or stop.
 
 To stop the bot, disable the workflow in the Actions tab.
 
 ## Open Questions
 
-* **Every new issue, or only labelled ones?** Plans on every team-opened issue give the most data, but may be noise on issues that are already detailed.
+* **Every new issue later?** The pilot only runs on labelled issues. If the plans are good, should the bot comment on every issue the team opens?
 * **What should the plan contain?** Are the headings above right, and is anything missing that we always ask in refinement?
 * **Billing after the pilot:** a Console API key with a spend cap, or another option, and who owns that budget?
 * **Phase 2:** if the plans are good, do we want the bot to also open draft PRs?
@@ -71,5 +72,4 @@ Where to run it: self-hosted runners are ruled out because GitHub [advises again
 
 ## More Information
 
-* [claude-code-action security notes](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md)
 * [Claude Code GitHub Actions documentation](https://code.claude.com/docs/en/github-actions)
