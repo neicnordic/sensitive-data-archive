@@ -13,7 +13,7 @@
       {
          "role": "admin",
          "path": "/dataset/*",
-         "action": "(GET)|(POST)|(PUT)"
+         "action": "(GET)|(POST)|(PUT)|(DELETE)"
       },
        {
          "role": "submission",

@@ -43,6 +43,8 @@ func getStructName(path string) any {
 		return new(DatasetMapping)
 	case "dataset-release":
 		return new(DatasetRelease)
+	case "dataset-file-removal":
+		return new(DatasetFileRemoval)
 	case "inbox-remove":
 		return new(InboxRemove)
 	case "inbox-rename":
@@ -94,6 +96,12 @@ type DatasetMapping struct {
 type DatasetRelease struct {
 	Type      string `json:"type"`
 	DatasetID string `json:"dataset_id"`
+}
+
+type DatasetFileRemoval struct {
+	Type        string `json:"type"`
+	DatasetID   string `json:"dataset_id"`
+	AccessionID string `json:"accession_id"`
 }
 
 type InfoError struct {
