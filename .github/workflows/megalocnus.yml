@@ -88,13 +88,19 @@ jobs:
             claude -p --restricted --strict-mcp-config --tools "Read,Grep,Glob" --model "$MODEL" \
               --output-format json --no-session-persistence > "$RUNNER_TEMP/out.json"
           # Keep the reply from the first heading on, without any marker the model echoed back,
-          # turn @handles into code so nobody is pinged, and stay under GitHub's comment limit.
+          # defuse HTML comments that could hide the footer, turn @handles into code so nobody
+          # is pinged, and stay under GitHub's comment limit.
           jq -r 'if type == "array" then .[-1] else . end | select(.is_error == false) | .result // empty' "$RUNNER_TEMP/out.json" |
-            grep -vF '<!-- megalocnus-plan -->' |
+            grep -vF '<!-- megalocnus-plan -->' | sed 's/<!--/\&lt;!--/g' |
             awk 'found || /^##?#? /{found=1; print}' |
             sed -E 's/(^|[^A-Za-z0-9_.`])@([A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9_.-]+)?)/\1`@\2`/g' |
             head -c 60000 > "$RUNNER_TEMP/plan.md"
           test -s "$RUNNER_TEMP/plan.md" || { echo "::error::Claude returned no plan."; exit 1; }
+          # Real API cost of this run, shown in the footer so the pilot can be evaluated per issue.
+          jq -r 'if type == "array" then .[-1] else . end |
+            "COST=\((.total_cost_usd // 0) * 100 | round / 100)",
+            "TOKENS_IN=\(.usage | ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) / 1000 | round)",
+            "TOKENS_OUT=\(.usage.output_tokens // 0 | . / 1000 | round)"' "$RUNNER_TEMP/out.json" >> "$GITHUB_ENV"
           # The plan is posted publicly, so refuse anything that contains the API key.
           if grep -qF -- "$ANTHROPIC_API_KEY" "$RUNNER_TEMP/plan.md" || grep -q 'sk-ant-' "$RUNNER_TEMP/plan.md"; then
             echo "::error::The plan contains a credential and was not posted."
@@ -122,6 +128,6 @@ jobs:
             cat "$RUNNER_TEMP/plan.md"
             echo
             echo '---'
-            echo "🦥 Written by Megalocnus, Claude (\`$MODEL\`), requested by $ACTOR. It read the code and changed nothing; the team decides what happens next. Answer the questions here and comment \`@megalocnus replan\` for an updated plan. React with 👍 or 👎 so we can evaluate the pilot. [Run log]($RUN_URL)"
+            echo "🦥 Written by Megalocnus, Claude (\`$MODEL\`), requested by $ACTOR. It read the code and changed nothing; the team decides what happens next. Answer the questions here and comment \`@megalocnus replan\` for an updated plan. React with 👍 or 👎 so we can evaluate the pilot. Cost: $COST USD (${TOKENS_IN}k tokens in, ${TOKENS_OUT}k out). [Run log]($RUN_URL)"
           } > "$RUNNER_TEMP/comment.md"
           gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
