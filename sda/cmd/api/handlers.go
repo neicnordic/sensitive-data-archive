@@ -481,6 +481,10 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = ingest.FilePath
+	auditEvent.SubmissionUser = ingest.User
 
 	ingestMessage := broker.Message{Key: fileID, Body: marshaledMsg}
 	if err := api.mq.Publish(ctx, "ingest", ingestMessage); err != nil {
@@ -899,6 +903,10 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = accession.FilePath
+	auditEvent.AccessionID = accession.AccessionID
 
 	if err := api.mq.Publish(ctx, "accession", broker.Message{Key: fileID, Body: marshaledMsg}); err != nil {
 		span.Error("failed to publish accession message", err)
@@ -1025,6 +1033,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	audit.FromContext(ctx).DatasetID = dataset.DatasetID
 
 	mappingsMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
 	if err := api.mq.Publish(ctx, "mappings", mappingsMessage); err != nil {
