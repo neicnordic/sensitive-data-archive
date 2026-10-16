@@ -17,12 +17,12 @@ type StdoutLogger struct {
 
 // NewStdoutLogger creates a StdoutLogger that writes to os.Stdout.
 func NewStdoutLogger() *StdoutLogger {
-	return newStdoutLoggerWithWriter(os.Stdout)
+	return NewStdoutLoggerWithWriter(os.Stdout)
 }
 
-// newStdoutLoggerWithWriter creates a StdoutLogger that writes to w.
+// NewStdoutLoggerWithWriter creates a StdoutLogger that writes to w.
 // Used in tests to capture output without redirecting os.Stdout.
-func newStdoutLoggerWithWriter(w io.Writer) *StdoutLogger {
+func NewStdoutLoggerWithWriter(w io.Writer) *StdoutLogger {
 	return &StdoutLogger{
 		encoder: json.NewEncoder(w),
 	}

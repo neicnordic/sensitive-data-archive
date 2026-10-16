@@ -16,13 +16,13 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/handlers"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	internalconfig "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 )
