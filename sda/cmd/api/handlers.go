@@ -446,6 +446,10 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = ingest.FilePath
+	auditEvent.SubmissionUser = ingest.User
 
 	ingestMessage := broker.Message{Key: fileID, Body: marshaledMsg}
 	if err := api.mq.Publish(context.Background(), "ingest", ingestMessage); err != nil {
@@ -843,6 +847,10 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = accession.FilePath
+	auditEvent.AccessionID = accession.AccessionID
 
 	slog.Info("sending accession message", "file_id", fileID, "accession_id", accession.AccessionID) // #nosec G706
 	if err := api.mq.Publish(context.Background(), "accession", broker.Message{Key: fileID, Body: marshaledMsg}); err != nil {
@@ -966,6 +974,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	audit.FromContext(ctx).DatasetID = dataset.DatasetID
 
 	mappingsMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
 	if err := api.mq.Publish(context.Background(), "mappings", mappingsMessage); err != nil {
