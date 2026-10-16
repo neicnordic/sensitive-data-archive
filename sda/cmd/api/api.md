@@ -455,6 +455,28 @@ storage:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
 
+## Audit log
+Every request to an endpoint behind authentication writes one audit event to stdout, whatever the log level, including requests that fail authentication or authorization. The event is a JSON object on its own line, with the same schema as the download service, and can be told apart from the application log by `"type":"audit"`:
+
+```json
+{"type":"audit","event":"api.request","timestamp":"2026-10-16T12:34:56.789Z","userId":"user@example.org","fileId":"3a7f2c91-b4e0-4d8a-9f3b-2c6e1a0d5f8e","correlationId":"4bf92f3577b34da6a3ce929d0e0e4736","path":"/file/ingest","httpStatus":200,"method":"POST","filePath":"inbox/file.c4gh","submissionUser":"submitter@example.org"}
+```
+
+- `type`: always `audit`.
+- `event`: always `api.request`.
+- `timestamp`: when the request finished, in UTC.
+- `userId`: the subject of the token, empty when authentication failed.
+- `correlationId`: the trace id of the request, the same value as `trace-id` in the application log.
+- `path`: the request path, without the query string, which can carry an access token.
+- `fileId`: the `fileid` query parameter when the request has one, the only value taken from the query; `POST /file/ingest` and `POST /file/accession` also set it when the file is given in the body.
+- `httpStatus`: the status code returned to the client.
+- `method`: the HTTP method.
+- `filePath` and `submissionUser`: set by `POST /file/ingest`.
+- `filePath` and `accessionId`: set by `POST /file/accession`.
+- `datasetId`: set by `POST /dataset/create`.
+
+The event never contains the token, the `Authorization` header or other request body content. Audit logging cannot be turned off. If the write to stdout fails, the event is reported in the application log at error level, including the user id, so the record is not lost.
+
 ## Observability
 The API service initializes the observability package, for configuration options and additional details see
 [Observability README.md](../../pkg/observability/README.md).
