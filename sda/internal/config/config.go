@@ -95,16 +95,15 @@ type S3InboxConf struct {
 	ReadyPath string `mapstructure:"ready_path"`
 }
 type APIConf struct {
-	RBACpolicy  []byte
-	CACert      string
-	ServerCert  string
-	ServerKey   string
-	Host        string
-	Port        int
-	Session     SessionConfig
-	MQ          *broker.AMQPBroker
-	Grpc        Grpc
-	AuditLogger *log.Logger
+	RBACpolicy []byte
+	CACert     string
+	ServerCert string
+	ServerKey  string
+	Host       string
+	Port       int
+	Session    SessionConfig
+	MQ         *broker.AMQPBroker
+	Grpc       Grpc
 }
 
 type SessionConfig struct {
@@ -560,12 +559,6 @@ func (c *Config) configAPI() error {
 	api.ServerKey = viper.GetString("api.serverKey")
 	api.ServerCert = viper.GetString("api.serverCert")
 	api.CACert = viper.GetString("api.CACert")
-	if viper.GetBool("api.audit") {
-		api.AuditLogger = log.New()
-		api.AuditLogger.SetFormatter(&log.JSONFormatter{})
-		api.AuditLogger.SetOutput(os.Stdout)
-		api.AuditLogger.SetLevel(log.InfoLevel)
-	}
 
 	c.API = api
 
@@ -580,7 +573,6 @@ func (c *Config) apiDefaults() {
 	viper.SetDefault("api.session.secure", true)
 	viper.SetDefault("api.session.httponly", true)
 	viper.SetDefault("api.session.name", "api_session_key")
-	viper.SetDefault("api.audit", true)
 }
 
 // configBroker provides configuration for the message broker
