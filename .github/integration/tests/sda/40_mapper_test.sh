@@ -218,6 +218,13 @@ if [ "$resp" != "deprecated" ]; then
 	exit 1
 fi
 
+# Attempt to release a deprecated dataset and see it fails
+dataset_release_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/release/EGAD74900000101")"
+if [ "$dataset_release_resp" != "400" ]; then
+	echo "expected failure when attempting to release deprecated dataset: EGAD74900000101, expected it 400 result, got: $dataset_release_resp"
+	exit 1
+fi
+
 resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/EGAD74900000102")"
 if [ "$resp" != "404" ]; then
 	echo "Error when getting dataset, expected 404 got: $resp"

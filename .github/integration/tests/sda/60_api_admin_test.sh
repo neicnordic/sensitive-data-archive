@@ -411,13 +411,13 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.fil
 done
 echo "Finalize by using file ID finished successfully"
 
-filesInDataset="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/SYNC-001-12345" | jq '.numberOfFiles')"
+filesInDataset="$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.numberOfFiles')"
 if [ "$filesInDataset" -ne 2 ]; then
 	echo "Error when getting SYNC-001-12345 dataset, expected it to have 2 files, got: $filesInDataset"
 	exit 1
 fi
 
-dataset_file_removal_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/dataset/SYNC-001-12345/SYNC-123-00003")"
+dataset_file_removal_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/dataset/SYNC-001-12345/files/SYNC-123-00003")"
 if [ "$dataset_file_removal_resp" != "202" ]; then
     echo "Error when requesting to remove file from dataset, expected 202 got: $dataset_file_removal_resp"
     exit 1
@@ -425,7 +425,7 @@ fi
 
 echo "waiting for dataset file removal to complete"
 RETRY_TIMES=0
-until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/mappings | jq -r '."messages_ready"')" -eq 0 ]; do
+until [ "$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.numberOfFiles')" -eq 1 ]; do
     echo "waiting for dataset file removal to complete"
     RETRY_TIMES=$((RETRY_TIMES + 1))
     if [ "$RETRY_TIMES" -eq 30 ]; then
@@ -435,10 +435,88 @@ until [ "$(curl -s -k -u guest:guest $URI/api/queues/sda/mappings | jq -r '."mes
     sleep 2
 done
 
-filesInDataset="$(curl -s -k -L -H "Authorization: Bearer $token" -X GET "http://api:8080/dataset/SYNC-001-12345" | jq '.numberOfFiles')"
-if [ "$filesInDataset" -ne 1 ]; then
-  echo "Error when getting SYNC-001-12345 dataset after file removal, expected it to have 1 file, got: $filesInDataset"
+datasetStatus=$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.status')
+if [ "$datasetStatus" != "file_removed" ]; then
+  echo "unexpected dataset status after file removal, expected it to have \"file_removed\" status, got: $datasetStatus"
   exit 1
 fi
+
+# Release dataset again after file removal
+
+dataset_release_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X POST "http://api:8080/dataset/release/SYNC-001-12345")"
+if [ "$dataset_release_resp" != "200" ]; then
+    echo "Error when requesting to release dataset after file removal, expected 200 got: $dataset_release_resp"
+    exit 1
+fi
+
+echo "waiting for dataset to be released after file removal"
+RETRY_TIMES=0
+until [ "$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.status')" == "released" ]; do
+    echo "waiting for dataset to be released after file removal"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset to be released after file removal"
+        exit 1
+    fi
+    sleep 2
+done
+
+# Now deprecate the dataset and then trigger file removal and check that dataset is still deprecated
+curl -s -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
+    -H 'Content-Type: application/json;charset=UTF-8' \
+    -d "$(jq -c -n \
+                --arg vhost test \
+                --arg name sda \
+                --argjson properties "$(jq -c -n \
+                                              --argjson delivery_mode 2 \
+                                              --arg content_encoding UTF-8 \
+                                              --arg content_type application/json \
+                                              '$ARGS.named'
+                                      )" \
+                --arg routing_key "mappings" \
+                --arg payload "$(jq -r -c -n \
+                                       --arg type deprecate \
+                                       --arg dataset_id SYNC-001-12345 \
+                                       '$ARGS.named')" \
+                --arg payload_encoding string \
+                '$ARGS.named')" | jq
+
+RETRY_TIMES=0
+until [ "$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.status')" == "deprecated" ]; do
+    echo "waiting for dataset to be deprecated"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset to be deprecated"
+        exit 1
+    fi
+    sleep 2
+done
+
+dataset_file_removal_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $token" -X DELETE "http://api:8080/dataset/SYNC-001-12345/files/SYNC-123-00004")"
+if [ "$dataset_file_removal_resp" != "202" ]; then
+    echo "Error when requesting to remove file from dataset after dataset deprecated, expected 202 got: $dataset_file_removal_resp"
+    exit 1
+fi
+
+echo "waiting for dataset file removal to complete after dataset deprecated"
+RETRY_TIMES=0
+until [ "$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.numberOfFiles')" -eq 0 ]; do
+    echo "waiting for dataset file removal to complete after dataset deprecated"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for dataset file removal to complete after dataset deprecated"
+        exit 1
+    fi
+    sleep 2
+done
+
+# Check that dataset is still deprecated after file removal
+datasetStatus=$(curl -s -k -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345" | jq -r '.status')
+if [ "$datasetStatus" != "deprecated" ]; then
+  echo "unexpected dataset status after file removal on deprecated dataset, expected it to have 'deprecated' status, got: $datasetStatus"
+  exit 1
+fi
+
+
 
 echo "API admin tests completed successfully"
