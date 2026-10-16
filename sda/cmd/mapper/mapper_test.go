@@ -27,6 +27,8 @@ func TestMapper(t *testing.T) {
 		mappingMapFileToDatasetRetryableErrorCase,
 		mappingGetMappingDataRetryableErrorCase,
 		mappingNoMappingDataFoundCase,
+		datasetFileRemovalSuccessCase,
+		datasetFileRemovalFileNotAssociatedCase,
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mockWriter, mockDatabase, mockBroker := tc.newMocks(t)
@@ -42,7 +44,7 @@ func TestMapper(t *testing.T) {
 			if err != nil {
 				t.Errorf("failed to marshal source message: %s", err.Error())
 			}
-			callbacks, err := v.handleMessage(context.Background(), &brokerv2.Message{Key: tc.sourceMessage.DatasetID, Body: jsonMsg})
+			callbacks, err := v.handleMessage(context.Background(), &brokerv2.Message{Key: "", Body: jsonMsg})
 			for _, cb := range callbacks {
 				cb()
 			}
@@ -54,7 +56,7 @@ func TestMapper(t *testing.T) {
 
 type testCase struct {
 	name          string
-	sourceMessage schema.DatasetMapping
+	sourceMessage any
 	newMocks      func(t *testing.T) (*mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker)
 	assertMocks   func(*testing.T, *mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker)
 	inboxConfig   helper.InboxProjectConfig
@@ -222,10 +224,6 @@ var releaseSuccessCase = testCase{
 	newMocks: func(t *testing.T) (*mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker) {
 		mockDatabase := &mocks.MockDatabase{}
 
-		mockDatabase.On("BeginTransaction").Return(nil).Once()
-		mockDatabase.On("Rollback").Return(nil).Once()
-		mockDatabase.On("Commit").Return(nil).Once()
-
 		mockDatabase.On("UpdateDatasetEvent", "dataset_123", "released", mock.Anything).Return(nil).Once()
 
 		return &mocks.MockWriter{}, mockDatabase, &mocks.MockBroker{}
@@ -246,10 +244,6 @@ var deprecatedSuccessCase = testCase{
 	},
 	newMocks: func(t *testing.T) (*mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker) {
 		mockDatabase := &mocks.MockDatabase{}
-
-		mockDatabase.On("BeginTransaction").Return(nil).Once()
-		mockDatabase.On("Rollback").Return(nil).Once()
-		mockDatabase.On("Commit").Return(nil).Once()
 
 		mockDatabase.On("UpdateDatasetEvent", "dataset_123", "deprecated", mock.Anything).Return(nil).Once()
 
@@ -374,9 +368,9 @@ var unknownOperationCase = testCase{
 		}
 
 		mockBroker.On("Publish", "error", brokerv2.Message{
-			Key: "dataset_123",
+			Key: "",
 			Headers: map[string]any{
-				"error-queue-reason": "could not derive schema from message",
+				"error-queue-reason": "unknown operation type",
 			},
 			Body: expectedRaw,
 		}).Return(nil).Once()
@@ -536,7 +530,7 @@ var mappingNoMappingDataFoundCase = testCase{
 		}
 
 		mockBroker.On("Publish", "error", brokerv2.Message{
-			Key: "dataset_123",
+			Key: "",
 			Headers: map[string]any{
 				"error-queue-reason": "mapping data for file not found",
 			},
@@ -544,6 +538,59 @@ var mappingNoMappingDataFoundCase = testCase{
 		}).Return(nil).Once()
 
 		return &mocks.MockWriter{}, mockDatabase, mockBroker
+	},
+	assertMocks: func(t *testing.T, mockReader *mocks.MockWriter, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
+		mockReader.AssertExpectations(t)
+		mockDatabase.AssertExpectations(t)
+		mockBroker.AssertExpectations(t)
+	},
+	expectedError: nil,
+}
+
+var datasetFileRemovalSuccessCase = testCase{
+	name: "dataset_file_removal_success",
+	sourceMessage: schema.DatasetFileRemoval{
+		Type:        "file_removal",
+		DatasetID:   "dataset_123",
+		AccessionID: "file_accession_1",
+	},
+	newMocks: func(t *testing.T) (*mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker) {
+		mockDatabase := &mocks.MockDatabase{}
+
+		mockDatabase.On("BeginTransaction").Return(nil).Once()
+		mockDatabase.On("Rollback").Return(nil).Once()
+		mockDatabase.On("GetDatasetStatus", "dataset_123").Return("released", nil).Once()
+		mockDatabase.On("RemoveFileFromDataset", "dataset_123", "file_accession_1").Return(nil).Once()
+		mockDatabase.On("UpdateDatasetEvent", "dataset_123", "file_removed", `{"type":"file_removal","dataset_id":"dataset_123","accession_id":"file_accession_1"}`).Return(nil).Once()
+		mockDatabase.On("Commit").Return(nil).Once()
+
+		return &mocks.MockWriter{}, mockDatabase, &mocks.MockBroker{}
+	},
+	assertMocks: func(t *testing.T, mockReader *mocks.MockWriter, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
+		mockReader.AssertExpectations(t)
+		mockDatabase.AssertExpectations(t)
+		mockBroker.AssertExpectations(t)
+	},
+	expectedError: nil,
+}
+
+var datasetFileRemovalFileNotAssociatedCase = testCase{
+	name: "dataset_file_removal_file_not_associated",
+	sourceMessage: schema.DatasetFileRemoval{
+		Type:        "file_removal",
+		DatasetID:   "dataset_123",
+		AccessionID: "file_accession_1",
+	},
+	newMocks: func(t *testing.T) (*mocks.MockWriter, *mocks.MockDatabase, *mocks.MockBroker) {
+		mockDatabase := &mocks.MockDatabase{}
+
+		mockDatabase.On("BeginTransaction").Return(nil).Once()
+		mockDatabase.On("Rollback").Return(nil).Once()
+
+		mockDatabase.On("GetDatasetStatus", "dataset_123").Return("released", nil).Once()
+		mockDatabase.On("RemoveFileFromDataset", "dataset_123", "file_accession_1").Return(database.ErrNoRowsAffected).Once()
+
+		return &mocks.MockWriter{}, mockDatabase, &mocks.MockBroker{}
 	},
 	assertMocks: func(t *testing.T, mockReader *mocks.MockWriter, mockDatabase *mocks.MockDatabase, mockBroker *mocks.MockBroker) {
 		mockReader.AssertExpectations(t)

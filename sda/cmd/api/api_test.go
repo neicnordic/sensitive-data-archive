@@ -27,6 +27,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
@@ -816,6 +817,7 @@ func TestDeprecateC4ghHash(t *testing.T) {
 		})
 	}
 }
+
 func TestGetDatasetDetails(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
@@ -893,6 +895,73 @@ func TestGetDatasetDetails(t *testing.T) {
 			assert.Equal(t, tc.expectedStatusCode, w.Code)
 
 			tc.assertMockDB(t, mockDB)
+		})
+	}
+}
+
+func TestRemoveFileFromDataset(t *testing.T) {
+	for _, tc := range []struct {
+		name               string
+		datasetID          string
+		accessionID        string
+		newMocks           func() (*mocks.MockDatabase, *mocks.MockBroker)
+		expectedStatusCode int
+		expectedBody       string
+	}{
+		{
+			name:        "not_found",
+			datasetID:   "not_found",
+			accessionID: "file_accession",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker) {
+				mockDB := &mocks.MockDatabase{}
+				mockDB.On("CheckIfFileInDataset", "not_found", "file_accession").Return(false, nil).Once()
+
+				return mockDB, &mocks.MockBroker{}
+			},
+			expectedStatusCode: http.StatusNotFound,
+			expectedBody:       fmt.Sprintf(`{"error": "%s"}`, http.StatusText(http.StatusNotFound)),
+		},
+		{
+			name:        "success",
+			datasetID:   "found",
+			accessionID: "file_accession",
+			newMocks: func() (*mocks.MockDatabase, *mocks.MockBroker) {
+				mockDB := &mocks.MockDatabase{}
+				mockBroker := &mocks.MockBroker{}
+				mockDB.On("CheckIfFileInDataset", "found", "file_accession").Return(true, nil).Once()
+
+				mockBroker.On("Publish", "mappings", brokerv2.Message{
+					Key:     "found",
+					Headers: nil,
+					Body:    []byte(`{"type":"file_removal","dataset_id":"found","accession_id":"file_accession"}`),
+				}).Return(nil).Once()
+
+				return mockDB, mockBroker
+			},
+			expectedStatusCode: http.StatusAccepted,
+			expectedBody:       "{}",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mockDB, mockBroker := tc.newMocks()
+
+			apiImpl := &API{
+				db: mockDB,
+				mq: mockBroker,
+			}
+
+			mux := http.NewServeMux()
+			mux.HandleFunc("DELETE /dataset/{datasetid}/files/{accessionid}", apiImpl.removeFileFromDataset)
+
+			r, w := newRequest(t, http.MethodDelete, "/dataset/"+tc.datasetID+"/files/"+tc.accessionID, nil, "")
+			mux.ServeHTTP(w, r)
+
+			_, err := io.ReadAll(w.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, tc.expectedStatusCode, w.Code)
+
+			mockDB.AssertExpectations(t)
+			mockBroker.AssertExpectations(t)
 		})
 	}
 }

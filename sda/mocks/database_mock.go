@@ -374,6 +374,12 @@ func (m *MockDatabase) CheckIfDatasetExists(_ context.Context, datasetID string)
 	return args.Get(0).(bool), args.Error(1)
 }
 
+func (m *MockDatabase) CheckIfFileInDataset(_ context.Context, datasetID, accessionID string) (bool, error) {
+	args := m.Called(datasetID, accessionID)
+
+	return args.Get(0).(bool), args.Error(1)
+}
+
 func (m *MockDatabase) GetArchivePathAndLocation(_ context.Context, accessionID string) (string, string, error) {
 	args := m.Called(accessionID)
 
@@ -396,4 +402,10 @@ func (m *MockDatabase) GetUserFiles(_ context.Context, userID, pathPrefix string
 	args := m.Called(userID, pathPrefix, allData, limit, cursor)
 
 	return args.Get(0).([]*database.SubmissionFileInfo), args.Get(1).(string), args.Error(2)
+}
+
+func (m *MockDatabase) RemoveFileFromDataset(_ context.Context, datasetID, accessionID string) error {
+	args := m.Called(datasetID, accessionID)
+
+	return args.Error(0)
 }

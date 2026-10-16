@@ -41,7 +41,8 @@ VALUES (0, now(), 'Created with version'),
        (24, now(), 'Add last_event column to files to avoid join on file_event_log'),
        (25, now(), 'Add download_path column to file_dataset to allow overriding the file submission_file_path during downloading'),
        (26, now(), 'Add removed file event'),
-       (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id');
+       (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id'),
+       (28, now(), 'Add file_removed dataset event type');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
@@ -204,6 +205,7 @@ CREATE TABLE dataset_events (
 -- These are the default dataset events to log.
 INSERT INTO dataset_events(id,title,description)
 VALUES (10, 'registered', 'Register a dataset to receive file accession IDs mappings.'),
+       (12, 'file_removed', 'A file has been removed from the dataset'),
        (20, 'released'  , 'The dataset is released on this date'),
        (30, 'deprecated', 'The dataset is deprecated on this date');
 

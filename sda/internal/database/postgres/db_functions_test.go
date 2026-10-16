@@ -637,6 +637,75 @@ func (ts *DatabaseTests) TestCheckIfDatasetExists() {
 	assert.Equal(ts.T(), ok, false)
 }
 
+func (ts *DatabaseTests) TestCheckIfFileInDataset() {
+	accessions := []string{}
+	for i := 0; i <= 3; i++ {
+		fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", fmt.Sprintf("/testuser/TestCheckIfDatasetExists-%d.c4gh", i), "testuser")
+		assert.NoError(ts.T(), err, "failed to register file in database")
+
+		err = ts.db.SetAccessionID(context.Background(), fmt.Sprintf("accession-%d", i), fileID)
+		assert.NoError(ts.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fileID)
+	}
+
+	diSet := map[string][]string{
+		"dataset": accessions[0:3],
+	}
+
+	for di, fIDs := range diSet {
+		for _, fileIDs := range fIDs {
+			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileIDs, nil), "failed to map file to dataset")
+		}
+	}
+
+	ok, err := ts.db.CheckIfFileInDataset(context.Background(), "dataset", "accession-1")
+	assert.NoError(ts.T(), err, "check if file in dataset failed")
+	assert.Equal(ts.T(), ok, true)
+
+	ok, err = ts.db.CheckIfFileInDataset(context.Background(), "missing dataset", "accession-1")
+	assert.NoError(ts.T(), err, "check if file in dataset failed")
+	assert.Equal(ts.T(), ok, false)
+
+	ok, err = ts.db.CheckIfFileInDataset(context.Background(), "dataset", "accession-4")
+	assert.NoError(ts.T(), err, "check if file in dataset failed")
+	assert.Equal(ts.T(), ok, false)
+}
+
+func (ts *DatabaseTests) TestRemoveFileFromDataset() {
+	accessions := []string{}
+	for i := 0; i <= 3; i++ {
+		fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", fmt.Sprintf("/testuser/TestCheckIfDatasetExists-%d.c4gh", i), "testuser")
+		assert.NoError(ts.T(), err, "failed to register file in database")
+
+		err = ts.db.SetAccessionID(context.Background(), fmt.Sprintf("accession-%d", i), fileID)
+		assert.NoError(ts.T(), err, "got (%v) when getting file archive information", err)
+
+		accessions = append(accessions, fileID)
+	}
+
+	diSet := map[string][]string{
+		"dataset": accessions[0:3],
+	}
+
+	for di, fIDs := range diSet {
+		for _, fileIDs := range fIDs {
+			assert.NoError(ts.T(), ts.db.MapFileToDataset(context.Background(), di, fileIDs, nil), "failed to map file to dataset")
+		}
+	}
+	err := ts.db.RemoveFileFromDataset(context.Background(), "dataset", "accession-1")
+	assert.NoError(ts.T(), err, "check if file in dataset failed")
+
+	err = ts.db.RemoveFileFromDataset(context.Background(), "dataset", "accession-1")
+	assert.EqualError(ts.T(), err, database.ErrNoRowsAffected.Error())
+
+	err = ts.db.RemoveFileFromDataset(context.Background(), "missing dataset", "accession-1")
+	assert.EqualError(ts.T(), err, database.ErrNoRowsAffected.Error())
+
+	err = ts.db.RemoveFileFromDataset(context.Background(), "dataset", "accession-4")
+	assert.EqualError(ts.T(), err, database.ErrNoRowsAffected.Error())
+}
+
 func (ts *DatabaseTests) TestGetArchivePath() {
 	fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/testuser/TestGetArchivePath-001.c4gh", "testuser")
 	assert.NoError(ts.T(), err, "failed to register file in database")

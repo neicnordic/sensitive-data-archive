@@ -74,6 +74,36 @@ paths:
           description: Authentication failure
         "500":
           description: Internal application error
+  /dataset/{datasetID}/files/{accessionID}:
+    delete:
+      summary: Requests removal of a file from a dataset.
+      description: >
+        Requests to remove the association between the file and the dataset.
+        The file itself is not deleted and must be deleted / disabled independently of the dataset if desired.
+        A successful response indicates that the request has been queued, 
+        it does not mean the file has already been removed from the dataset.
+      parameters:
+        - in: path
+          name: datasetID
+          schema:
+            type: string
+          required: true
+        - in: path
+          name: accessionID
+          schema:
+            type: string
+          required: true
+      responses:
+        "202":
+          description: Removal request accepted and queued for processing
+        "400":
+          description: Bad request
+        "401":
+          description: Authentication failure
+        "404":
+          description: Dataset not found or file is not associated with the dataset
+        "500":
+          description: Internal application error
   /dataset/{datasetID}:
     get:
       description: Get the state of a dataset
@@ -565,7 +595,7 @@ components:
   schemas:
     C4ghKeyAdd:
       type: object
-      properties: 
+      properties:
         description:
           type: string
           example: pubkey description
