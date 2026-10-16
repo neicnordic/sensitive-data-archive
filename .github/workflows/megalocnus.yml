@@ -30,7 +30,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           ACTOR: ${{ github.actor }}
           BODY: ${{ github.event.comment.body }}
-          HAS_SECRETS: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' && secrets.MEGALOCNUS_APP_PRIVATE_KEY != '' }}
+          HAS_SECRETS: ${{ secrets.ANTHROPIC_API_KEY != '' && secrets.MEGALOCNUS_APP_PRIVATE_KEY != '' }}
         run: |
           if [ "$GITHUB_EVENT_NAME" = issue_comment ] && [ "$(printf '%s\n' "$BODY" | head -n 1 | tr -d '\r' | xargs)" != "@megalocnus replan" ]; then
             echo "::notice::Skipped: the comment is not the replan command."
@@ -43,7 +43,7 @@ jobs:
             *) echo "::notice::Skipped: $ACTOR has '$permission' access, and Megalocnus only runs for the team."; exit 0 ;;
           esac
           if [ "$HAS_SECRETS" != "true" ]; then
-            echo "::notice::Skipped: CLAUDE_CODE_OAUTH_TOKEN or MEGALOCNUS_APP_PRIVATE_KEY is not set."
+            echo "::notice::Skipped: ANTHROPIC_API_KEY or MEGALOCNUS_APP_PRIVATE_KEY is not set."
             exit 0
           fi
           echo "run=true" >> "$GITHUB_OUTPUT"
@@ -79,7 +79,7 @@ jobs:
 
       - name: Write the plan
         env:
-          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           # --restricted plus --tools leaves only Read, Grep and Glob, confined to the checkout; no shell, no web, no MCP.
           { cat .github/megalocnus/refine.md
@@ -95,8 +95,8 @@ jobs:
             sed -E 's/(^|[^A-Za-z0-9_.`])@([A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9_.-]+)?)/\1`@\2`/g' |
             head -c 60000 > "$RUNNER_TEMP/plan.md"
           test -s "$RUNNER_TEMP/plan.md" || { echo "::error::Claude returned no plan."; exit 1; }
-          # The plan is posted publicly, so refuse anything that contains the token.
-          if grep -qF -- "$CLAUDE_CODE_OAUTH_TOKEN" "$RUNNER_TEMP/plan.md" || grep -q 'sk-ant-' "$RUNNER_TEMP/plan.md"; then
+          # The plan is posted publicly, so refuse anything that contains the API key.
+          if grep -qF -- "$ANTHROPIC_API_KEY" "$RUNNER_TEMP/plan.md" || grep -q 'sk-ant-' "$RUNNER_TEMP/plan.md"; then
             echo "::error::The plan contains a credential and was not posted."
             exit 1
           fi
