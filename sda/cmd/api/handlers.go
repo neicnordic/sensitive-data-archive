@@ -23,6 +23,7 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
@@ -37,6 +38,31 @@ const maxHeaderBytes = 16 << 20
 
 func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		rec := &statusRecorder{ResponseWriter: w}
+		w = rec
+		// Path only: the query can carry an access_token. fileid is the one query parameter
+		// kept, so the event names its target even when the handler exits early.
+		event := &audit.Event{
+			Event:         audit.EventAPIRequest,
+			Method:        r.Method,
+			Path:          r.URL.Path,
+			FileID:        r.URL.Query().Get("fileid"),
+			CorrelationID: uuid.NewString(), // 4.0.x has no tracing, so there is no trace id to use
+		}
+		r = r.WithContext(audit.NewContext(r.Context(), event))
+		// One audit event per request, also on the error exits and when the handler panics.
+		defer func() {
+			p := recover()
+			event.HTTPStatus = rec.code()
+			if p != nil && rec.status == 0 {
+				event.HTTPStatus = http.StatusInternalServerError
+			}
+			api.auditLogger.Log(r.Context(), *event)
+			if p != nil {
+				panic(p)
+			}
+		}()
+
 		token, err := api.auth.Authenticate(r)
 		if err != nil {
 			slog.Error("failed to authorize request", "err", err)
@@ -46,6 +72,7 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		subject := token.Subject()
+		event.UserID = subject
 		urlPath := r.URL.Path
 		method := r.Method
 
@@ -82,12 +109,51 @@ func (api *API) recoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (api *API) loggingMiddleware(next http.Handler) http.Handler {
-	type responseWriter struct {
-		http.ResponseWriter
-		statusCode int
+// statusRecorder records the status code a handler writes.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	// 1xx responses other than 101 are not final, so only a later code is the status the client gets.
+	if w.status == 0 && (code >= http.StatusOK || code == http.StatusSwitchingProtocols) {
+		w.status = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusRecorder) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
 	}
 
+	return w.ResponseWriter.Write(b)
+}
+
+// Flush commits the response, so a later WriteHeader no longer changes the status.
+func (w *statusRecorder) Flush() {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	// http.Flusher has no error result; a failed flush shows up on the handler's next Write.
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func (w *statusRecorder) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// code returns the recorded status, or 200 which net/http sends when the handler wrote nothing.
+func (w *statusRecorder) code() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+
+	return w.status
+}
+
+func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ready" {
 			next.ServeHTTP(w, r)
@@ -95,7 +161,7 @@ func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		rw := &statusRecorder{ResponseWriter: w}
 		start := time.Now()
 		next.ServeHTTP(rw, r)
 
@@ -105,7 +171,7 @@ func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.String("remote_addr", r.RemoteAddr),
-			slog.Int("status_code", rw.statusCode),
+			slog.Int("status_code", rw.code()),
 			slog.Duration("duration", time.Since(start)),
 			slog.Time("time", start),
 		)

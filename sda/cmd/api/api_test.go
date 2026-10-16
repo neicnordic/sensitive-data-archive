@@ -27,6 +27,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/neicnordic/crypt4gh/keys"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
@@ -116,6 +117,7 @@ func setup() error {
 	}
 
 	api.auth = auth
+	api.auditLogger = audit.NoopLogger{}
 
 	pubBytes, _, err := keys.GenerateKeyPair()
 	if err != nil {
