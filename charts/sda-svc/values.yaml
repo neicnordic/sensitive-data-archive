@@ -45,10 +45,7 @@ global:
       targetLabels: []
       tlsConfig: {}
 
-
-
-
-  # Name of an injected config file, located in the secretsPath
+# Name of an injected config file, located in the secretsPath
 # If the file is located in a subpath it can be set using the confFilePath
 # If no conf file is specified DB and MQ connections will be configured via ENVs
   confFile: config.yaml
@@ -114,7 +111,7 @@ global:
     ingressLabelMatch: ""
     # @param global.networkPolicy.prometheusNamespace the namespace to allow prometheus scraping from, required if network policy creation and prometheus exporting enabled
     prometheusNamespace: ""
-    # @param global.networkPolicy.prometheusPodLabelMatch pod labels (as a "key: value" string) of the promethues scraper to allow ingress to, e.g. "app.kubernetes.io/name: prometheus"
+    # @param global.networkPolicy.prometheusPodLabelMatch pod labels (as a "key: value" string) of the prometheus scraper to allow ingress to, e.g. "app.kubernetes.io/name: prometheus"
     # If empty, ingress on the prometheus ports is allowed to ALL pods in prometheusNamespace
     prometheusPodLabelMatch: "app.kubernetes.io/name: prometheus"
     # @param global.networkPolicy.otlpNamespace the namespace to allow otlp egress to, required if network policy creation and otlp tracing exporting enabled
