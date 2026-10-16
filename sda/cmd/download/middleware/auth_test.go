@@ -12,7 +12,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
 	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
