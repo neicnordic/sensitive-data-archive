@@ -56,7 +56,7 @@ The bot is good at finding where an issue contradicts the code, and misses what 
 
 ## Cost and billing
 
-The pilot would run on @jhagberg's Claude Team seat, which Anthropic documents for GitHub Actions. Whether one person's seat may back a bot the whole team uses is not confirmed, so we should check that before starting or use a Console API key instead. A comment takes about 30 seconds and would cost about 0.24 USD at API prices on Opus, so roughly 10 USD a month at our current rate of about 40 new issues.
+The pilot runs on a Console API key with a monthly spend limit, so it does not depend on anyone's personal seat. A comment takes about 30 seconds and costs about 0.24 USD on Opus, so roughly 10 USD a month at our current rate of about 40 new issues. Each comment shows its own token use and cost.
 
 ## Rollout
 
@@ -71,7 +71,7 @@ To stop the bot, disable the workflow in the Actions tab.
 
 * **Every new issue, or only labelled ones?** Running on every new issue gives more data and makes the pilot a real test (Malin). Since the bot misses about half of what matters, a comment on every issue may get skimmed past (Jonas). The pilot starts with the label; we could agree to label most issues before refinement.
 * **What should the comments contain?** Are the two steps and their headings right, and is anything missing that we always ask in refinement?
-* **Billing after the pilot:** a Console API key with a spend cap, or another option, and who owns that budget?
+* **Budget after the pilot:** who owns the API key budget, and what monthly limit is reasonable?
 * **Phase 2:** if the plans are good, do we want the bot to also open draft PRs?
 
 ## Considered Options
