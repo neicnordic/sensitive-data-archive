@@ -31,7 +31,7 @@ func (api *API) routes() http.Handler {
 	mux.HandleFunc("GET /datasets/list", api.rbac(api.listAllDatasets))
 	mux.HandleFunc("GET /datasets/list/{username}", api.rbac(api.listUserDatasets))
 	mux.HandleFunc("POST /dataset/create", api.rbac(api.createDataset))
-	mux.HandleFunc("DELETE /dataset/{datasetid}/{accessionid}", api.rbac(api.removeFileFromDataset))
+	mux.HandleFunc("DELETE /dataset/{datasetid}/files/{accessionid}", api.rbac(api.removeFileFromDataset))
 	mux.HandleFunc("POST /dataset/rotatekey/{datasetid}", api.rbac(api.rotateKeyDataset))
 	mux.HandleFunc("POST /dataset/release/{datasetid}", api.rbac(api.releaseDataset))
 	mux.HandleFunc("PUT /dataset/verify/{dataset}", api.rbac(api.verifyDataset))

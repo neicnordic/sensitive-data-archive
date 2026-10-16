@@ -20,10 +20,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add new database func: CheckIfFileInDataset to check if a file accession id is associated with a dataset accession id
 - Add new database func: RemoveFileFromDataset to remove associated between a file and a dataset
 - mapper: add handling of dataset file removal message
+- Add new dataset event type: file_removed to be used to indicate a file has been removed from a dataset
+  - After a file removal a dataset should be released again
+  - If dataset is already deprecated allow file removal but do not "undeprecate" dataset with a file_removed event  
 
 ### Changed
 
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
+- api: update /dataset/${datasetID}/release to only reject dataset with "deprecated" status
 
 ### Fixed
 

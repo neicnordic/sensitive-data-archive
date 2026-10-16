@@ -559,7 +559,7 @@ var datasetFileRemovalSuccessCase = testCase{
 
 		mockDatabase.On("BeginTransaction").Return(nil).Once()
 		mockDatabase.On("Rollback").Return(nil).Once()
-
+		mockDatabase.On("GetDatasetStatus", "dataset_123").Return("released", nil).Once()
 		mockDatabase.On("RemoveFileFromDataset", "dataset_123", "file_accession_1").Return(nil).Once()
 		mockDatabase.On("UpdateDatasetEvent", "dataset_123", "file_removed", `{"type":"file_removal","dataset_id":"dataset_123","accession_id":"file_accession_1"}`).Return(nil).Once()
 		mockDatabase.On("Commit").Return(nil).Once()
@@ -587,6 +587,7 @@ var datasetFileRemovalFileNotAssociatedCase = testCase{
 		mockDatabase.On("BeginTransaction").Return(nil).Once()
 		mockDatabase.On("Rollback").Return(nil).Once()
 
+		mockDatabase.On("GetDatasetStatus", "dataset_123").Return("released", nil).Once()
 		mockDatabase.On("RemoveFileFromDataset", "dataset_123", "file_accession_1").Return(database.ErrNoRowsAffected).Once()
 
 		return &mocks.MockWriter{}, mockDatabase, &mocks.MockBroker{}
