@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -404,6 +405,18 @@ func (app *mapper) handleFileRemoval(ctx context.Context, message *broker.Messag
 		}
 	}()
 
+	datasetStatus, err := tx.GetDatasetStatus(ctx, datasetFileRemoval.DatasetID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Error("dataset does not exists", err)
+
+			return []func(){app.errorQueue(ctx, message, "dataset does not exists")}, nil
+		}
+		span.Warn("failed to get dataset status", slog.Any("error", err))
+
+		return nil, err
+	}
+
 	if err := tx.RemoveFileFromDataset(ctx, datasetFileRemoval.DatasetID, datasetFileRemoval.AccessionID); err != nil {
 		if !errors.Is(err, database.ErrNoRowsAffected) {
 			span.Warn("failed to remove file from dataset", slog.Any("error", err))
@@ -416,7 +429,14 @@ func (app *mapper) handleFileRemoval(ctx context.Context, message *broker.Messag
 		return nil, nil
 	}
 
-	if err := tx.UpdateDatasetEvent(ctx, datasetFileRemoval.DatasetID, "file_removed", string(message.Body)); err != nil {
+	targetStatus := "file_removed"
+
+	// if dataset is deprecated allow file removal but do not "undeprecate" dataset
+	if datasetStatus == "deprecated" {
+		targetStatus = datasetStatus
+	}
+
+	if err := tx.UpdateDatasetEvent(ctx, datasetFileRemoval.DatasetID, targetStatus, string(message.Body)); err != nil {
 		span.Warn("failed to log file removal dataset event", slog.Any("error", err))
 
 		return nil, err
