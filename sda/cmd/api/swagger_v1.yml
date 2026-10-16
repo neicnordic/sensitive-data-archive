@@ -595,7 +595,7 @@ components:
   schemas:
     C4ghKeyAdd:
       type: object
-      properties: 
+      properties:
         description:
           type: string
           example: pubkey description

@@ -953,9 +953,9 @@ func TestRemoveFileFromDataset(t *testing.T) {
 			}
 
 			mux := http.NewServeMux()
-			mux.HandleFunc("DELETE /dataset/{datasetid}/{accessionid}", apiImpl.removeFileFromDataset)
+			mux.HandleFunc("DELETE /dataset/{datasetid}/files/{accessionid}", apiImpl.removeFileFromDataset)
 
-			r, w := newRequest(t, http.MethodDelete, "/dataset/"+tc.datasetID+"/"+tc.accessionID, nil, "")
+			r, w := newRequest(t, http.MethodDelete, "/dataset/"+tc.datasetID+"/files/"+tc.accessionID, nil, "")
 			mux.ServeHTTP(w, r)
 
 			_, err := io.ReadAll(w.Body)

@@ -118,6 +118,7 @@ GRANT INSERT ON sda.file_event_log TO mapper;
 GRANT INSERT ON sda.file_dataset TO mapper;
 GRANT SELECT ON sda.file_dataset TO mapper;
 GRANT DELETE ON sda.file_dataset TO mapper;
+GRANT SELECT ON sda.dataset_event_log TO mapper;
 GRANT INSERT ON sda.dataset_event_log TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_dataset_id_seq TO mapper;
 GRANT USAGE, SELECT ON SEQUENCE sda.file_event_log_id_seq TO mapper;
