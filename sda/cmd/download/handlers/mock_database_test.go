@@ -5,8 +5,8 @@ import (
 	"io"
 	"sync"
 
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 )
 
 // capturingLogger records audit events for test assertions.
