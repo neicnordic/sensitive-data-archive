@@ -128,6 +128,6 @@ jobs:
             cat "$RUNNER_TEMP/plan.md"
             echo
             echo '---'
-            echo "🦥 Written by Megalocnus, Claude (\`$MODEL\`), requested by $ACTOR. It read the code and changed nothing; the team decides what happens next. Answer the questions here and comment \`@megalocnus replan\` for an updated plan. React with 👍 or 👎 so we can evaluate the pilot. Cost: $COST USD (${TOKENS_IN}k tokens in, ${TOKENS_OUT}k out). [Run log]($RUN_URL)"
+            echo "🦥 Written by Megalocnus, Claude (\`$MODEL\`), requested by $ACTOR. It read the code and changed nothing; the team decides what happens next. To get an updated plan, answer here or add what is missing, then post a new comment whose first line is \`@megalocnus replan\`. React with 👍 or 👎 so we can evaluate the pilot. Cost: $COST USD (${TOKENS_IN}k tokens in, ${TOKENS_OUT}k out). [Run log]($RUN_URL)"
           } > "$RUNNER_TEMP/comment.md"
           gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"
