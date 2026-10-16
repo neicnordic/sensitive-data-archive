@@ -1,10 +1,10 @@
 package handlers
 
 import (
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	storage "github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 )
 
