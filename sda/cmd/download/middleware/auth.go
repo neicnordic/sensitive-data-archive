@@ -23,9 +23,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	log "github.com/sirupsen/logrus"
 )
 

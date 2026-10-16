@@ -25,7 +25,7 @@ func TestNoopLogger_LogDoesNotPanic(t *testing.T) {
 
 func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
 		Event:         EventCompleted,
@@ -51,7 +51,7 @@ func TestStdoutLogger_OutputsValidJSON(t *testing.T) {
 
 func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
 		Type:          "something-else",
@@ -69,7 +69,7 @@ func TestStdoutLogger_AlwaysSetsTypeToAudit(t *testing.T) {
 
 func TestStdoutLogger_TimestampAlwaysOverwritten(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	// Provide a caller-supplied timestamp — logger must ignore it
 	eastern := time.FixedZone("EST", -5*60*60)
@@ -96,7 +96,7 @@ func TestStdoutLogger_TimestampAlwaysOverwritten(t *testing.T) {
 
 func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	before := time.Now().UTC()
 	logger.Log(context.Background(), Event{
@@ -117,7 +117,7 @@ func TestStdoutLogger_ZeroTimestampFilled(t *testing.T) {
 
 func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
 		Event:         EventDenied,
@@ -148,7 +148,7 @@ func TestStdoutLogger_OmitsEmptyOptionalFields(t *testing.T) {
 
 func TestStdoutLogger_MultipleEvents(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
 		Event:         EventCompleted,
@@ -176,7 +176,7 @@ func TestStdoutLogger_MultipleEvents(t *testing.T) {
 
 func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 	var buf bytes.Buffer
-	logger := newStdoutLoggerWithWriter(&buf)
+	logger := NewStdoutLoggerWithWriter(&buf)
 
 	logger.Log(context.Background(), Event{
 		Event:         EventCompleted,
@@ -196,4 +196,13 @@ func TestAuditContract_RequiredFieldsPopulated(t *testing.T) {
 	assert.NotEmpty(t, decoded.CorrelationID, "CorrelationID must be populated")
 	assert.NotEmpty(t, decoded.Path, "Endpoint must be populated")
 	assert.NotZero(t, decoded.HTTPStatus, "HTTPStatus must be populated")
+}
+
+func TestContext_RoundTrip(t *testing.T) {
+	ev := &Event{UserID: "user"}
+	ctx := NewContext(context.Background(), ev)
+	FromContext(ctx).FilePath = "inbox/file.c4gh"
+	assert.Equal(t, "inbox/file.c4gh", ev.FilePath)
+
+	assert.NotNil(t, FromContext(context.Background()), "missing event must not be nil")
 }
