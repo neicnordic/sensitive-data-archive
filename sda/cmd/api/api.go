@@ -17,6 +17,7 @@ import (
 	"github.com/casbin/casbin/v2/model"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
@@ -44,6 +45,7 @@ type API struct {
 	inboxWriter storage.Writer
 	db          database.Database
 	mq          broker.Broker
+	auditLogger audit.Logger
 }
 
 func main() {
@@ -136,7 +138,7 @@ func run() error {
 	}
 	defer conn.Close()
 
-	app := API{grpcClient: conn, auth: auth, enforcer: e, inboxReader: inboxReader, inboxWriter: inboxWriter, db: db, mq: mq}
+	app := API{grpcClient: conn, auth: auth, enforcer: e, inboxReader: inboxReader, inboxWriter: inboxWriter, db: db, mq: mq, auditLogger: audit.NewStdoutLogger()}
 
 	serverErr := make(chan error, 1)
 	addr := apiconfig.APIAddr()
