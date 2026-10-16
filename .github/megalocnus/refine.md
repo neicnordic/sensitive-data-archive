@@ -17,6 +17,7 @@ Check these against the issue and the code; ask the team only about what neither
 * Which version, branch or backend does it concern (download v1 or v2, Ceph or POSIX), and is it still wanted?
 * Does existing code or documentation already cover part of it?
 * Does "done" include tests, docs and swagger, and must existing behaviour stay unaffected?
+* Does the change affect data already stored under the old behaviour, so that a migration is needed?
 
 Propose the smallest change that fully solves the issue, using what the repository already has. No options or "for later" work nobody asked for, but never cut validation, error handling that prevents data loss, or security.
 
