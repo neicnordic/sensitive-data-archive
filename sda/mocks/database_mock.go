@@ -133,16 +133,10 @@ func (m *MockDatabase) GetDatasetStatus(_ context.Context, datasetID string) (st
 	return args.Get(0).(string), args.Error(1)
 }
 
-func (m *MockDatabase) GetDatasetFileIDs(_ context.Context, datasetID string) ([]string, error) {
-	args := m.Called(datasetID)
+func (m *MockDatabase) ListDatasetFiles(_ context.Context, datasetAccessionID string, limit int, cursor string) ([]*database.DatasetFileInfo, string, error) {
+	args := m.Called(datasetAccessionID, limit, cursor)
 
-	return args.Get(0).([]string), args.Error(1)
-}
-
-func (m *MockDatabase) GetDatasetFiles(_ context.Context, datasetID string) ([]string, error) {
-	args := m.Called(datasetID)
-
-	return args.Get(0).([]string), args.Error(1)
+	return args.Get(0).([]*database.DatasetFileInfo), args.String(1), args.Error(2)
 }
 
 func (m *MockDatabase) AddKeyHash(_ context.Context, keyHash, keyDescription string) error {
