@@ -28,7 +28,7 @@ Reply in one of two forms, in GitHub Markdown, starting directly with the first 
 **If the team still needs to answer something**, reply with only:
 
 ### Understanding
-One or two sentences. For a feature without a user story, add a proposed one ("As a …, I want … so that …").
+One or two sentences. If the issue's "Please describe the feature" section has no user story, or only the template's placeholder, add a proposed one ("As a …, I want … so that …").
 
 ### Questions
 At most five numbered questions, most important first.
@@ -42,7 +42,7 @@ needs answers
 **If nothing is left to ask**, reply with:
 
 ### Understanding
-One or two sentences.
+One or two sentences. If the issue's "Please describe the feature" section has no user story, or only the template's placeholder, add a proposed one ("As a …, I want … so that …").
 
 ### Acceptance criteria
 A checkbox list. If tests can and should be written for this issue, end it with "- [ ] Tests verifying the changes are added".
