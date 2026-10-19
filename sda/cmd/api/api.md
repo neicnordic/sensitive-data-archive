@@ -473,7 +473,7 @@ Every request to an endpoint behind authentication writes one audit event to std
 - `method`: the HTTP method.
 - `filePath` and `submissionUser`: set by `POST /file/ingest` and `POST /file/cancel`.
 - `filePath` and `accessionId`: set by `POST /file/accession`.
-- `datasetId`: set by `POST /dataset/create`.
+- `datasetId`: the dataset the request acts on: the dataset id in the path, or for `POST /dataset/create` the dataset the body names.
 
 The event never contains the token, the `Authorization` header or other request body content. Audit logging cannot be turned off. If the write to stdout fails, the whole event is written to the application log at error level instead, so the record is not lost.
 
