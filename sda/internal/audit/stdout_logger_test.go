@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"testing"
 )
@@ -25,10 +26,15 @@ func (w *failOnceWriter) Write(p []byte) (int, error) {
 }
 
 func TestStdoutLogger_WriteErrorDoesNotSilenceLaterEvents(t *testing.T) {
+	var appLog bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&appLog, nil)))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
 	w := &failOnceWriter{}
 	l := NewStdoutLoggerWithWriter(w)
 
-	l.Log(context.Background(), Event{Event: EventAPIRequest, UserID: "first"})
+	l.Log(context.Background(), Event{Event: EventAPIRequest, UserID: "first", DatasetID: "EGAD1"})
 	l.Log(context.Background(), Event{Event: EventAPIRequest, UserID: "second"})
 
 	out := w.buf.String()
@@ -40,5 +46,8 @@ func TestStdoutLogger_WriteErrorDoesNotSilenceLaterEvents(t *testing.T) {
 	}
 	if strings.Count(out, "\n") != 1 {
 		t.Fatalf("expected exactly one line, got %q", out)
+	}
+	if !strings.Contains(appLog.String(), `"userId":"first"`) || !strings.Contains(appLog.String(), `"datasetId":"EGAD1"`) {
+		t.Fatalf("the failed event must reach the application log in full, got %q", appLog.String())
 	}
 }
