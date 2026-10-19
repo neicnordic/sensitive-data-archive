@@ -69,7 +69,6 @@ services:
       args:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
-      target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-s3inbox ]
     container_name: s3inbox
