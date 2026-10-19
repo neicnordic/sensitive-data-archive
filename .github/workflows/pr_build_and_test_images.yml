@@ -332,6 +332,7 @@ jobs:
     needs:
       - build_images
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         deployment: ["federated", "isolated"]
