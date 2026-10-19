@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -47,7 +48,8 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 			Method:        r.Method,
 			Path:          r.URL.Path,
 			FileID:        r.PathValue("fileid"),
-			CorrelationID: uuid.NewString(), // 4.0.x has no tracing, so there is no trace id to use
+			DatasetID:     cmp.Or(r.PathValue("datasetid"), r.PathValue("dataset")), // verify names it {dataset}
+			CorrelationID: uuid.NewString(),                                         // 4.0.x has no tracing, so there is no trace id to use
 		}
 		r = r.WithContext(audit.NewContext(r.Context(), event))
 		// One audit event per request, also on the error exits and when the handler panics.

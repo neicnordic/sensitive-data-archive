@@ -218,6 +218,27 @@ func TestAuditEventFileIDTarget(t *testing.T) {
 	}
 }
 
+func TestAuditEventDatasetIDFromPath(t *testing.T) {
+	mux := http.NewServeMux()
+	noop := api.rbac(func(http.ResponseWriter, *http.Request) {})
+	mux.HandleFunc("POST /dataset/release/{datasetid}", noop)
+	mux.HandleFunc("PUT /dataset/verify/{dataset}", noop)
+	for _, tc := range []struct{ method, target string }{
+		{http.MethodPost, "/dataset/release/" + datasetID},
+		{http.MethodPut, "/dataset/verify/" + datasetID},
+	} {
+		t.Run(tc.target, func(t *testing.T) {
+			buf := captureAudit(t)
+			r, w := newRequest(t, tc.method, tc.target, nil, token)
+			mux.ServeHTTP(w, r)
+
+			lines := auditLines(t, buf)
+			require.Len(t, lines, 1)
+			assert.Equal(t, datasetID, lines[0]["datasetId"])
+		})
+	}
+}
+
 func TestAuditEventStatus(t *testing.T) {
 	tests := []struct {
 		name        string
