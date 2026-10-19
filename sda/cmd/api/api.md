@@ -475,7 +475,7 @@ Every request to an endpoint behind authentication writes one audit event to std
 - `filePath` and `accessionId`: set by `POST /file/accession`.
 - `datasetId`: set by `POST /dataset/create`.
 
-The event never contains the token, the `Authorization` header or other request body content. Audit logging cannot be turned off. If the write to stdout fails, the event is reported in the application log at error level, including the user id, so the record is not lost.
+The event never contains the token, the `Authorization` header or other request body content. Audit logging cannot be turned off. If the write to stdout fails, the whole event is written to the application log at error level instead, so the record is not lost.
 
 ## Observability
 The API service initializes the observability package, for configuration options and additional details see
