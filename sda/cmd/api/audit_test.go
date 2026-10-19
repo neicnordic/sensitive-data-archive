@@ -55,8 +55,9 @@ func scopedMockDB(t *testing.T) *mocks.MockDatabase {
 	return mockDB
 }
 
-func TestAuditEventPerRoute(t *testing.T) {
-	// Let the test user through every route, so the handlers run instead of rbac denying them.
+// allowAllRoutes lets the test user through every route, so the handlers run instead of rbac denying them.
+func allowAllRoutes(t *testing.T) {
+	t.Helper()
 	allowAll := []byte(`{"policy":[{"role":"dummy","path":"/*","action":"(GET)|(POST)|(PUT)|(DELETE)"}],"roles":[]}`)
 	m, err := model.NewModelFromString(jsonadapter.Model)
 	require.NoError(t, err)
@@ -65,6 +66,10 @@ func TestAuditEventPerRoute(t *testing.T) {
 	prevEnforcer := api.enforcer
 	api.enforcer = e
 	t.Cleanup(func() { api.enforcer = prevEnforcer })
+}
+
+func TestAuditEventPerRoute(t *testing.T) {
+	allowAllRoutes(t)
 
 	mockDB := scopedMockDB(t)
 	mockDB.On("GetFileStatusHistory", fileID).Return([]database.FileStatus{}, nil)
@@ -179,6 +184,37 @@ func TestAuditEventFileIDQuery(t *testing.T) {
 			lines := auditLines(t, buf)
 			require.Len(t, lines, 1)
 			assert.Equal(t, tc.fileID, lines[0]["fileId"])
+		})
+	}
+}
+
+func TestAuditEventFileIDTarget(t *testing.T) {
+	allowAllRoutes(t)
+	cancelBody := toJSON(t, map[string]any{"filepath": filePath, "user": userID})
+	tests := []struct {
+		name, method, target string
+		body                 []byte
+		want                 map[string]any
+	}{
+		{"cancel by body names the resolved file", http.MethodPost, "/file/cancel", cancelBody,
+			map[string]any{"fileId": fileID, "filePath": filePath, "submissionUser": userID}},
+		{"path id wins over a query fileid", http.MethodDelete, "/file/" + userID + "/" + fileID + "?fileid=" + unknownID, nil,
+			map[string]any{"fileId": fileID}},
+		{"query fileid ignored where the handler does not read it", http.MethodGet, "/files?fileid=" + unknownID, nil,
+			map[string]any{"fileId": nil}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			buf := captureAudit(t)
+			r, w := newRequest(t, tc.method, tc.target, tc.body, token)
+			api.routes().ServeHTTP(w, r)
+
+			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+			lines := auditLines(t, buf)
+			require.Len(t, lines, 1)
+			for k, v := range tc.want {
+				assert.Equal(t, v, lines[0][k], k)
+			}
 		})
 	}
 }

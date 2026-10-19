@@ -44,13 +44,13 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 
 		rec := &statusRecorder{ResponseWriter: w}
 		w = rec
-		// Path only: the query can carry an access_token. fileid is the one query parameter
-		// kept, so the event names its target even when the handler exits early.
+		// Path only: the query can carry an access_token. Handlers that take the file id
+		// from the query or the body set FileID themselves.
 		event := &audit.Event{
 			Event:         audit.EventAPIRequest,
 			Method:        r.Method,
 			Path:          r.URL.Path,
-			FileID:        r.URL.Query().Get("fileid"),
+			FileID:        r.PathValue("fileid"),
 			CorrelationID: span.SpanContext().TraceID().String(),
 		}
 		r = r.WithContext(audit.NewContext(ctx, event))
@@ -409,6 +409,7 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 	)
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 
 	switch {
 	case fileID != "" && r.ContentLength > 0:
@@ -515,6 +516,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 	)
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 
 	switch {
 	case fileID != "" && r.ContentLength > 0:
@@ -588,6 +590,11 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
+	auditEvent := audit.FromContext(r.Context())
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = cancel.FilePath
+	auditEvent.SubmissionUser = cancel.User
 
 	archiveData, err := api.db.GetArchived(r.Context(), fileID)
 	if err != nil {
@@ -815,6 +822,7 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 	accessionID := r.URL.Query().Get("accessionid")
 	hasQuery := fileID != "" || accessionID != ""
 	hasBody := r.ContentLength > 0
