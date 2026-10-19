@@ -446,7 +446,7 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	auditEvent := audit.FromContext(ctx)
+	auditEvent := audit.FromContext(r.Context())
 	auditEvent.FileID = fileID
 	auditEvent.FilePath = ingest.FilePath
 	auditEvent.SubmissionUser = ingest.User
@@ -847,7 +847,7 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	auditEvent := audit.FromContext(ctx)
+	auditEvent := audit.FromContext(r.Context())
 	auditEvent.FileID = fileID
 	auditEvent.FilePath = accession.FilePath
 	auditEvent.AccessionID = accession.AccessionID
@@ -974,7 +974,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	audit.FromContext(ctx).DatasetID = dataset.DatasetID
+	audit.FromContext(r.Context()).DatasetID = dataset.DatasetID
 
 	mappingsMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
 	if err := api.mq.Publish(context.Background(), "mappings", mappingsMessage); err != nil {

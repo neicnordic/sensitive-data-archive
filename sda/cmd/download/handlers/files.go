@@ -12,11 +12,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/database"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/streaming"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	log "github.com/sirupsen/logrus"
 )
 
