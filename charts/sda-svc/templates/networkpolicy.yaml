@@ -84,9 +84,11 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ required "global.networkPolicy.prometheusNamespace is required when Prometheus metrics are enabled" .Values.global.networkPolicy.prometheusNamespace | quote }}
+          {{ if .Values.global.networkPolicy.prometheusPodLabelMatch }}
           podSelector:
             matchLabels:
-              {{ .Values.global.networkPolicy.prometheusPodLabelMatch | nindent 14 }}
+                  {{ .Values.global.networkPolicy.prometheusPodLabelMatch | nindent 14 }}
+          {{ end }}
       ports:
         - protocol: TCP
           port: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
@@ -110,9 +112,11 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ required "global.networkPolicy.otlpNamespace is required when otlp trace exporter enabled" .Values.global.networkPolicy.otlpNamespace | quote }}
+          {{ if .Values.global.networkPolicy.otlpPodLabelMatch }}
           podSelector:
             matchLabels:
               {{ .Values.global.networkPolicy.otlpPodLabelMatch | nindent 14 }}
+          {{ end }}
       ports:
         - protocol: TCP
           port: 4318
