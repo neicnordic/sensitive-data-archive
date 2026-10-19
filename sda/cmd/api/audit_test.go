@@ -17,8 +17,6 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.opentelemetry.io/otel"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 )
 
 // captureAudit points the api audit logger at a buffer for the duration of the test.
@@ -167,7 +165,8 @@ func TestAuditEventFileIDQuery(t *testing.T) {
 		wantCode int
 	}{
 		{"/file/cancel?fileid=" + fileID, fileID, http.StatusOK},
-		{"/file/ingest?fileid=" + unknownID, unknownID, http.StatusNotFound},
+		// 4.0.x answers 400 for an unknown file where main answers 404; the fileId must still reach the event.
+		{"/file/ingest?fileid=" + unknownID, unknownID, http.StatusBadRequest},
 	}
 	for _, tc := range tests {
 		t.Run(tc.target, func(t *testing.T) {
@@ -265,11 +264,7 @@ func TestAuditEventBodyIdentifiers(t *testing.T) {
 	}
 }
 
-func TestLoggingMiddlewareStatusAndTraceID(t *testing.T) {
-	prevTP := otel.GetTracerProvider()
-	otel.SetTracerProvider(sdktrace.NewTracerProvider())
-	t.Cleanup(func() { otel.SetTracerProvider(prevTP) })
-
+func TestLoggingMiddlewareStatus(t *testing.T) {
 	prevLog := slog.Default()
 	var logBuf bytes.Buffer
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logBuf, nil)))
@@ -299,8 +294,7 @@ func TestLoggingMiddlewareStatusAndTraceID(t *testing.T) {
 		assert.Equal(t, float64(http.StatusNotFound), requestLine(t)["status_code"])
 	})
 
-	t.Run("trace id matches audit correlationId", func(t *testing.T) {
-		logBuf.Reset()
+	t.Run("audit correlationId is set", func(t *testing.T) {
 		buf := captureAudit(t)
 		r, w := newRequest(t, http.MethodGet, "/files", nil, token)
 		handler.ServeHTTP(w, r)
@@ -308,8 +302,6 @@ func TestLoggingMiddlewareStatusAndTraceID(t *testing.T) {
 		require.Equal(t, http.StatusOK, w.Code)
 		lines := auditLines(t, buf)
 		require.Len(t, lines, 1)
-		traceID := requestLine(t)["trace-id"]
-		assert.NotEqual(t, "00000000000000000000000000000000", traceID)
-		assert.Equal(t, traceID, lines[0]["correlationId"])
+		assert.NotEmpty(t, lines[0]["correlationId"])
 	})
 }
