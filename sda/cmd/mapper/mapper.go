@@ -88,7 +88,7 @@ func run() error {
 			slog.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
-	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 25 {
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 28 {
 		return errors.Join(errors.New("database schema v25 is required"), err)
 	}
 
