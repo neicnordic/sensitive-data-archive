@@ -160,10 +160,7 @@ services:
 
   validator-orchestrator:
     build:
-      args:
-        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
-      context: ../../sda
-      target: debug
+      context: ../../sda-validator/orchestrator
     security_opt: # Unconfine seccomp and apparmor to allow apptainer to create usernamespaces within the container
       - seccomp=unconfined
       - apparmor=unconfined
@@ -212,7 +209,6 @@ services:
       args:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
-      target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-s3inbox ]
     container_name: s3inbox
