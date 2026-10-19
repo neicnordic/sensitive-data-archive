@@ -39,6 +39,7 @@ jobs:
           failed=()
           while read -r source tag; do
             case "$source" in ''|'#'*) continue ;; esac
+            case "$source" in *@sha256:*) ;; *) failed+=("$tag (no digest)"); continue ;; esac
             # skip what is already mirrored, so a run only pulls new or changed images from Docker Hub
             have=$(docker buildx imagetools inspect "$MIRROR:$tag" 2>/dev/null | awk '/^Digest:/{print $2}') || have=
             [ "$have" = "${source#*@}" ] && continue
