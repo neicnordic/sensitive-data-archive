@@ -43,7 +43,6 @@ func (l *StdoutLogger) Log(_ context.Context, event Event) {
 	}
 	if err != nil {
 		// The response is not blocked, but the record must not vanish without a trace.
-		slog.Error("audit event not written", "error", err,
-			"event", event.Event, "user", event.UserID, "method", event.Method, "path", event.Path, "status", event.HTTPStatus)
+		slog.Error("audit event not written", "error", err, "audit_event", event)
 	}
 }
