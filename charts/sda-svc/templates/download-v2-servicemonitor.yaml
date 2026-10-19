@@ -1,48 +1,5 @@
 {{- if or (or (eq "all" .Values.global.deploymentType) (eq "external" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
 {{- if .Values.global.downloadV2.enabled }}
-{{- if eq "prometheus" .Values.global.observability.env.OTEL_METRICS_EXPORTER }}
-{{- if .Values.global.observability.serviceMonitor.enabled }}
-apiVersion: monitoring.coreos.com/v1
-kind: ServiceMonitor
-metadata:
-  name: {{ template "sda.fullname" . }}-download-v2
-  labels:
-    app: {{ template "sda.fullname" . }}-download-v2
-    chart: {{ .Chart.Name }}-{{ .Chart.Version }}
-    {{- if .Values.global.observability.serviceMonitor.labels }}
-{{ toYaml .Values.global.observability.serviceMonitor.labels | indent 4 }}
-    {{- end }}
-  {{- if .Values.global.observability.serviceMonitor.annotations }}
-  annotations:
-{{ toYaml .Values.global.observability.serviceMonitor.annotations | indent 4 }}
-  {{- end }}
-spec:
-  selector:
-    matchLabels:
-      app: {{ template "sda.fullname" . }}-download-v2
-  namespaceSelector:
-    matchNames:
-      - {{ .Release.Namespace | quote }}
-  endpoints:
-    - port: prometheus
-      {{- if .Values.global.observability.serviceMonitor.interval }}
-      interval: {{ .Values.global.observability.serviceMonitor.interval }}
-      {{- end }}
-      {{- if .Values.global.observability.serviceMonitor.scrapeTimeout }}
-      scrapeTimeout: {{ .Values.global.observability.serviceMonitor.scrapeTimeout }}
-      {{- end }}
-      {{- if .Values.global.observability.serviceMonitor.scheme }}
-      scheme: {{ .Values.global.observability.serviceMonitor.scheme | quote }}
-      {{- end }}
-      {{- with .Values.global.observability.serviceMonitor.tlsConfig }}
-      tlsConfig:
-        {{ toYaml . | nindent 8 }}
-      {{- end }}
-  {{- with .Values.global.observability.serviceMonitor.targetLabels }}
-  targetLabels:
-    {{ toYaml . | nindent 4 }}
-  {{- end }}
-{{- end }}
-{{- end }}
+{{- include "sda.serviceMonitor" (dict "root" . "app" "download-v2") }}
 {{- end }}
 {{- end }}
