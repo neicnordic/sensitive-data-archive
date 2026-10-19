@@ -468,10 +468,10 @@ Every request to an endpoint behind authentication writes one audit event to std
 - `userId`: the subject of the token, empty when authentication failed.
 - `correlationId`: the trace id of the request, the same value as `trace-id` in the application log.
 - `path`: the request path, without the query string, which can carry an access token.
-- `fileId`: the `fileid` query parameter when the request has one, the only value taken from the query; `POST /file/ingest` and `POST /file/accession` also set it when the file is given in the body.
+- `fileId`: the file the request acts on: the file id in the path, or for `POST /file/ingest`, `POST /file/cancel` and `POST /file/accession` the `fileid` query parameter or the file the body names. No other query parameter is read.
 - `httpStatus`: the status code returned to the client.
 - `method`: the HTTP method.
-- `filePath` and `submissionUser`: set by `POST /file/ingest`.
+- `filePath` and `submissionUser`: set by `POST /file/ingest` and `POST /file/cancel`.
 - `filePath` and `accessionId`: set by `POST /file/accession`.
 - `datasetId`: set by `POST /dataset/create`.
 
