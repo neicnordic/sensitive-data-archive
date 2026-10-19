@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -51,6 +52,7 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 			Method:        r.Method,
 			Path:          r.URL.Path,
 			FileID:        r.PathValue("fileid"),
+			DatasetID:     cmp.Or(r.PathValue("datasetid"), r.PathValue("dataset")), // verify names it {dataset}
 			CorrelationID: span.SpanContext().TraceID().String(),
 		}
 		r = r.WithContext(audit.NewContext(ctx, event))
