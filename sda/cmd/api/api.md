@@ -161,7 +161,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/:username/:fileid`
   - accepts `DELETE` requests
-  - marks the file as `disabled` in the database, and deletes it from the inbox.
+  - marks the file as `removed` in the database, and deletes it from the inbox.
   - The file is identified by its id, returned by `users/:username/:files`
 
   - Response codes
