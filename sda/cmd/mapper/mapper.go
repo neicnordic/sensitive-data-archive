@@ -89,7 +89,7 @@ func run() error {
 		}
 	}()
 	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 28 {
-		return errors.Join(errors.New("database schema v25 is required"), err)
+		return errors.Join(errors.New("database schema v28 is required"), err)
 	}
 
 	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
