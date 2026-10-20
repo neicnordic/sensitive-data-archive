@@ -76,6 +76,12 @@ func (m *MockDatabase) GetSizeAndObjectCountOfLocation(_ context.Context, locati
 	return args.Get(0).(uint64), args.Get(1).(uint64), args.Error(2)
 }
 
+func (m *MockDatabase) GetObjectCountOfLocation(_ context.Context, backend, location string) (uint64, error) {
+	args := m.Called(backend, location)
+
+	return args.Get(0).(uint64), args.Error(1)
+}
+
 func (m *MockDatabase) GetReVerificationData(_ context.Context, accessionID string) (*database.ReVerificationData, error) {
 	args := m.Called(accessionID)
 
