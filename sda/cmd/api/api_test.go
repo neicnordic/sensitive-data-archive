@@ -219,7 +219,7 @@ func setup() error {
 	mockDB.On("ListKeyHashes").Return([]*database.C4ghKeyHash{{Hash: "", Description: "test", CreatedAt: "time", DeprecatedAt: "time"}}, nil)
 	mockDB.On("AddKeyHash", mock.Anything, mock.Anything).Return(nil)
 	mockDB.On("DeprecateKeyHash", mock.Anything).Return(nil)
-	mockDB.On("UpdateFileEventLog", fileID, "disabled", "api", "{}", "{}").Return(nil)
+	mockDB.On("UpdateFileEventLog", fileID, "removed", "api", "{}", "{}").Return(nil)
 
 	api.db = mockDB
 	mockBroker := &mocks.MockBroker{}

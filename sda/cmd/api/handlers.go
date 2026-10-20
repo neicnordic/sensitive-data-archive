@@ -614,8 +614,8 @@ func (api *API) deleteFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.db.UpdateFileEventLog(ctx, fileID, "disabled", "api", "{}", "{}"); err != nil {
-		span.Error("failed to set file status disabled", err, slog.String("file_id", fileID))
+	if err := api.db.UpdateFileEventLog(ctx, fileID, "removed", "api", "{}", "{}"); err != nil {
+		span.Error("failed to set file status removed", err, slog.String("file_id", fileID))
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return
