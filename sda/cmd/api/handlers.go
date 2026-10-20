@@ -1044,9 +1044,12 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if status == "deprecated" {
-		span.Warn("dataset is deprecated", slog.String("dataset_id", datasetID), slog.String("status", status))
-		writeJSON(w, http.StatusBadRequest, "dataset deprecated")
+	if status == "deprecated" || status == "released" {
+		span.Warn("dataset can not be released",
+			slog.String("dataset_id", datasetID),
+			slog.String("status", status),
+		)
+		writeJSON(w, http.StatusBadRequest, "dataset can not be released")
 
 		return
 	}
