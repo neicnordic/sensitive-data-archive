@@ -59,4 +59,4 @@ Leave this heading out if there are none.
 ### Recommendation
 ready, or split (with the proposed split).
 
-Be brief: one line per bullet, under 150 words when you ask questions and under 250 words with a plan. Do not hard-wrap lines, do not @-mention anyone, and do not quote environment variables, tokens or file contents that look like secrets.
+Be brief: one line per bullet, under 150 words when you ask questions and under 250 words with a plan. Do not hard-wrap lines, do not @-mention anyone, and do not quote environment variables, tokens or file contents that look like secrets. Stop after the Recommendation section; the workflow adds the footer.

@@ -87,12 +87,12 @@ jobs:
             echo '<open-issues>'; cat "$RUNNER_TEMP/open-issues.json"; echo '</open-issues>'; } |
             claude -p --restricted --strict-mcp-config --tools "Read,Grep,Glob" --model "$MODEL" \
               --output-format json --no-session-persistence > "$RUNNER_TEMP/out.json"
-          # Keep the reply from the first heading on, without any marker the model echoed back,
-          # defuse HTML comments that could hide the footer, turn @handles into code so nobody
-          # is pinged, and stay under GitHub's comment limit.
+          # Keep the reply from the first heading on, without any marker the model echoed back
+          # or footer it copied from an earlier plan, defuse HTML comments that could hide the
+          # footer, turn @handles into code so nobody is pinged, and stay under GitHub's comment limit.
           jq -r 'if type == "array" then .[-1] else . end | select(.is_error == false) | .result // empty' "$RUNNER_TEMP/out.json" |
             grep -vF '<!-- megalocnus-plan -->' | sed 's/<!--/\&lt;!--/g' |
-            awk 'found || /^##?#? /{found=1; print}' |
+            awk 'found || /^##?#? /{found=1; print}' | sed '/^🦥/,$d' |
             sed -E 's/(^|[^A-Za-z0-9_.`])@([A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9_.-]+)?)/\1`@\2`/g' |
             head -c 60000 > "$RUNNER_TEMP/plan.md"
           test -s "$RUNNER_TEMP/plan.md" || { echo "::error::Claude returned no plan."; exit 1; }
