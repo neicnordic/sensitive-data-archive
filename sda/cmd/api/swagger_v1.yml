@@ -82,6 +82,8 @@ paths:
         The file itself is not deleted and must be deleted / disabled independently of the dataset if desired.
         A successful response indicates that the request has been queued, 
         it does not mean the file has already been removed from the dataset.
+        After a file removal the dataset should be released again to indicate that the desired modifications are complete 
+        and dataset should be available for download, etc again.
       parameters:
         - in: path
           name: datasetID
