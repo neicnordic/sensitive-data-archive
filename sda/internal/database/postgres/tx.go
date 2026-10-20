@@ -226,6 +226,10 @@ func (tx *pgTx) GetSizeAndObjectCountOfLocation(ctx context.Context, location st
 	return tx.getSizeAndObjectCountOfLocation(ctx, tx.tx, location)
 }
 
+func (tx *pgTx) GetObjectCountOfLocation(ctx context.Context, backend, location string) (uint64, error) {
+	return tx.getObjectCountOfLocation(ctx, tx.tx, backend, location)
+}
+
 func (tx *pgTx) SetBackedUp(ctx context.Context, location, path, fileID string) error {
 	return tx.setBackedUp(ctx, tx.tx, location, path, fileID)
 }
