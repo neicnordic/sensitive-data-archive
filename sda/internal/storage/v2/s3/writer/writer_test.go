@@ -445,3 +445,80 @@ func (ts *WriterTestSuite) TestWriteFile_AllEndpointsBecomeFull() {
 	ts.NotContains(ts.s3Mock1.buckets, "", "nothing may be uploaded to an empty bucket name")
 	ts.NotContains(ts.s3Mock2.buckets, "", "nothing may be uploaded to an empty bucket name")
 }
+
+// TestFindActiveBucket_NoLimits checks that an endpoint without max_objects and max_size never asks the
+// location broker, whose database lookup can take minutes on a large sda.files (#2695).
+func (ts *WriterTestSuite) TestFindActiveBucket_NoLimits() {
+	endpoint := &endpointConfig{
+		AccessKey:    "access_key1",
+		SecretKey:    "secret_key1",
+		Region:       "us-east-1",
+		Endpoint:     ts.s3Mock1.server.URL,
+		DisableHTTPS: true,
+		BucketPrefix: "bucket_in_1-",
+	}
+	broker := &mockLocationBroker{}
+	// NewWriter in SetupTest already created bucket_in_1-1
+	ts.s3Mock1.buckets = map[string]map[string]string{}
+
+	bucket, err := endpoint.findActiveBucket(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.Equal("bucket_in_1-1", bucket, "the first bucket is created when none exists")
+	ts.Contains(ts.s3Mock1.buckets, "bucket_in_1-1")
+
+	ts.s3Mock1.buckets["bucket_in_1-2"] = map[string]string{}
+	bucket, err = endpoint.findActiveBucket(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.Equal("bucket_in_1-1", bucket)
+
+	broker.AssertNotCalled(ts.T(), "GetObjectCount", mock.Anything)
+	broker.AssertNotCalled(ts.T(), "GetSize", mock.Anything)
+}
+
+// TestFindActiveBucket_OnlyMaxObjects checks that the size is not looked up when max_size is not set.
+func (ts *WriterTestSuite) TestFindActiveBucket_OnlyMaxObjects() {
+	endpoint := &endpointConfig{
+		AccessKey:    "access_key1",
+		SecretKey:    "secret_key1",
+		Region:       "us-east-1",
+		Endpoint:     ts.s3Mock1.server.URL,
+		DisableHTTPS: true,
+		BucketPrefix: "bucket_in_1-",
+		MaxObjects:   10,
+	}
+	ts.s3Mock1.buckets["bucket_in_1-1"] = map[string]string{}
+	ts.s3Mock1.buckets["bucket_in_1-2"] = map[string]string{}
+	broker := &mockLocationBroker{}
+	broker.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(10, nil).Once()
+	broker.On("GetObjectCount", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(9, nil).Once()
+
+	bucket, err := endpoint.findActiveBucket(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.Equal("bucket_in_1-2", bucket)
+	broker.AssertExpectations(ts.T())
+	broker.AssertNotCalled(ts.T(), "GetSize", mock.Anything)
+}
+
+// TestFindActiveBucket_OnlyMaxSize checks that the object count is not looked up when max_objects is not set.
+func (ts *WriterTestSuite) TestFindActiveBucket_OnlyMaxSize() {
+	endpoint := &endpointConfig{
+		AccessKey:    "access_key1",
+		SecretKey:    "secret_key1",
+		Region:       "us-east-1",
+		Endpoint:     ts.s3Mock1.server.URL,
+		DisableHTTPS: true,
+		BucketPrefix: "bucket_in_1-",
+		maxSizeBytes: 100,
+	}
+	ts.s3Mock1.buckets["bucket_in_1-1"] = map[string]string{}
+	ts.s3Mock1.buckets["bucket_in_1-2"] = map[string]string{}
+	broker := &mockLocationBroker{}
+	broker.On("GetSize", fmt.Sprintf("%s/bucket_in_1-1", ts.s3Mock1.server.URL)).Return(100, nil).Once()
+	broker.On("GetSize", fmt.Sprintf("%s/bucket_in_1-2", ts.s3Mock1.server.URL)).Return(99, nil).Once()
+
+	bucket, err := endpoint.findActiveBucket(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.Equal("bucket_in_1-2", bucket)
+	broker.AssertExpectations(ts.T())
+	broker.AssertNotCalled(ts.T(), "GetObjectCount", mock.Anything)
+}

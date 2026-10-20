@@ -349,3 +349,39 @@ func (ts *WriterTestSuite) TestWriteFile_NoMockLocationBroker_FirstDirFull() {
 	ts.NoError(err)
 	ts.Len(tmpFiles, 0)
 }
+
+// TestIsUsable_NoLimits checks that a path without max_objects and max_size never asks the
+// location broker, whose database lookup can take minutes on a large sda.files (#2695).
+func (ts *WriterTestSuite) TestIsUsable_NoLimits() {
+	broker := &mockLocationBroker{}
+
+	usable, err := (&endpointConfig{Path: ts.dir1}).isUsable(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.True(usable)
+	broker.AssertNotCalled(ts.T(), "GetObjectCount", mock.Anything)
+	broker.AssertNotCalled(ts.T(), "GetSize", mock.Anything)
+}
+
+// TestIsUsable_OnlyMaxObjects checks that the size is not looked up when max_size is not set.
+func (ts *WriterTestSuite) TestIsUsable_OnlyMaxObjects() {
+	broker := &mockLocationBroker{}
+	broker.On("GetObjectCount", ts.dir1).Return(9, nil).Once()
+
+	usable, err := (&endpointConfig{Path: ts.dir1, MaxObjects: 10}).isUsable(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.True(usable)
+	broker.AssertExpectations(ts.T())
+	broker.AssertNotCalled(ts.T(), "GetSize", mock.Anything)
+}
+
+// TestIsUsable_OnlyMaxSize checks that the object count is not looked up when max_objects is not set.
+func (ts *WriterTestSuite) TestIsUsable_OnlyMaxSize() {
+	broker := &mockLocationBroker{}
+	broker.On("GetSize", ts.dir1).Return(100, nil).Once()
+
+	usable, err := (&endpointConfig{Path: ts.dir1, maxSizeBytes: 100}).isUsable(context.TODO(), "test", broker)
+	ts.NoError(err)
+	ts.False(usable)
+	broker.AssertExpectations(ts.T())
+	broker.AssertNotCalled(ts.T(), "GetObjectCount", mock.Anything)
+}
