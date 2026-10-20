@@ -36,10 +36,13 @@ type sizeAndCountFinder struct {
 	sizeAndCountFinderFunc func(ctx context.Context, location string) (uint64, uint64, error)
 }
 
+// locationEntry caches the count and the size with their own timestamps, since GetObjectCount
+// can look up the count alone.
 type locationEntry struct {
-	lastChecked time.Time
-	objectCount uint64
-	size        uint64
+	countChecked time.Time
+	sizeChecked  time.Time
+	objectCount  uint64
+	size         uint64
 }
 
 func NewLocationBroker(db database.Database, options ...func(*config)) (LocationBroker, error) {
@@ -72,7 +75,7 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, backendName, locati
 	defer l.Unlock()
 
 	loc, ok := l.checkedLocations[location]
-	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
+	if ok && loc.countChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.objectCount, nil
 	}
 
@@ -80,7 +83,15 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, backendName, locati
 	var err error
 	switch backendName {
 	case "inbox", "archive", "backup":
-		size, objectCount, err = l.db.GetSizeAndObjectCountOfLocation(ctx, location)
+		objectCount, err = l.db.GetObjectCountOfLocation(ctx, backendName, location)
+		if err != nil {
+			return 0, err
+		}
+		entry := l.entry(location)
+		entry.objectCount = objectCount
+		entry.countChecked = time.Now()
+
+		return objectCount, nil
 	default:
 		var sizeAndCountFinderFunc func(ctx context.Context, location string) (uint64, uint64, error)
 		for _, scf := range l.sizeAndCountFinders {
@@ -101,11 +112,7 @@ func (l *locationBroker) GetObjectCount(ctx context.Context, backendName, locati
 		return 0, err
 	}
 
-	l.checkedLocations[location] = &locationEntry{
-		lastChecked: time.Now(),
-		size:        size,
-		objectCount: objectCount,
-	}
+	l.setSizeAndObjectCount(location, size, objectCount)
 
 	return objectCount, nil
 }
@@ -115,7 +122,7 @@ func (l *locationBroker) GetSize(ctx context.Context, backendName, location stri
 	defer l.Unlock()
 
 	loc, ok := l.checkedLocations[location]
-	if ok && loc.lastChecked.Add(l.config.cacheTTL).After(time.Now()) {
+	if ok && loc.sizeChecked.Add(l.config.cacheTTL).After(time.Now()) {
 		return loc.size, nil
 	}
 
@@ -144,11 +151,26 @@ func (l *locationBroker) GetSize(ctx context.Context, backendName, location stri
 		return 0, err
 	}
 
-	l.checkedLocations[location] = &locationEntry{
-		lastChecked: time.Now(),
-		size:        size,
-		objectCount: objectCount,
-	}
+	l.setSizeAndObjectCount(location, size, objectCount)
 
 	return size, nil
+}
+
+// entry returns the cache entry of a location, creating it when missing. The caller must hold the lock.
+func (l *locationBroker) entry(location string) *locationEntry {
+	loc, ok := l.checkedLocations[location]
+	if !ok {
+		loc = &locationEntry{}
+		l.checkedLocations[location] = loc
+	}
+
+	return loc
+}
+
+// setSizeAndObjectCount caches both values of a location. The caller must hold the lock.
+func (l *locationBroker) setSizeAndObjectCount(location string, size, objectCount uint64) {
+	entry := l.entry(location)
+	now := time.Now()
+	entry.size, entry.sizeChecked = size, now
+	entry.objectCount, entry.countChecked = objectCount, now
 }

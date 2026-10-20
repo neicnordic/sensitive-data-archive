@@ -33,7 +33,7 @@ func (ts *LocationBrokerTestSuite) TestGetSize() {
 
 func (ts *LocationBrokerTestSuite) TestGetObjectCount() {
 	mockDb := &mocks.MockDatabase{}
-	mockDb.On("GetSizeAndObjectCountOfLocation", "mock_location").Return(uint64(123), uint64(321), nil).Once()
+	mockDb.On("GetObjectCountOfLocation", "inbox", "mock_location").Return(uint64(321), nil).Once()
 
 	lb, err := NewLocationBroker(mockDb)
 	if err != nil {
@@ -47,7 +47,7 @@ func (ts *LocationBrokerTestSuite) TestGetObjectCount() {
 
 func (ts *LocationBrokerTestSuite) TestGetObjectCount_WithCache() {
 	mockDb := &mocks.MockDatabase{}
-	mockDb.On("GetSizeAndObjectCountOfLocation", "mock_location").Return(uint64(123), uint64(321), nil).Once()
+	mockDb.On("GetObjectCountOfLocation", "inbox", "mock_location").Return(uint64(321), nil).Once()
 
 	lb, err := NewLocationBroker(mockDb, CacheTTL(time.Second*60))
 	if err != nil {
@@ -61,7 +61,7 @@ func (ts *LocationBrokerTestSuite) TestGetObjectCount_WithCache() {
 	countFromCache, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(countFromDB, countFromCache)
-	mockDb.AssertNumberOfCalls(ts.T(), "GetSizeAndObjectCountOfLocation", 1)
+	mockDb.AssertNumberOfCalls(ts.T(), "GetObjectCountOfLocation", 1)
 }
 
 func (ts *LocationBrokerTestSuite) TestGetSize_WithCache() {
@@ -73,13 +73,43 @@ func (ts *LocationBrokerTestSuite) TestGetSize_WithCache() {
 		ts.FailNow(err.Error())
 	}
 
-	sizeFromDB, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
+	sizeFromDB, err := lb.GetSize(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
-	ts.Equal(uint64(321), sizeFromDB)
+	ts.Equal(uint64(123), sizeFromDB)
 
-	sizeFromCache, err := lb.GetObjectCount(context.TODO(), "inbox", "mock_location")
+	sizeFromCache, err := lb.GetSize(context.TODO(), "inbox", "mock_location")
 	ts.NoError(err)
 	ts.Equal(sizeFromDB, sizeFromCache)
+	mockDb.AssertNumberOfCalls(ts.T(), "GetSizeAndObjectCountOfLocation", 1)
+}
+
+// TestGetSize_AfterCachedObjectCount checks that a cached count-only lookup is not returned as a size.
+func (ts *LocationBrokerTestSuite) TestGetSize_AfterCachedObjectCount() {
+	mockDb := &mocks.MockDatabase{}
+	mockDb.On("GetObjectCountOfLocation", "archive", "mock_location").Return(uint64(5), nil).Once()
+	mockDb.On("GetSizeAndObjectCountOfLocation", "mock_location").Return(uint64(123), uint64(5), nil).Once()
+
+	lb, err := NewLocationBroker(mockDb, CacheTTL(time.Second*60))
+	if err != nil {
+		ts.FailNow(err.Error())
+	}
+
+	count, err := lb.GetObjectCount(context.TODO(), "archive", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(5), count)
+
+	size, err := lb.GetSize(context.TODO(), "archive", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(123), size)
+
+	size, err = lb.GetSize(context.TODO(), "archive", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(123), size)
+	count, err = lb.GetObjectCount(context.TODO(), "archive", "mock_location")
+	ts.NoError(err)
+	ts.Equal(uint64(5), count)
+
+	mockDb.AssertNumberOfCalls(ts.T(), "GetObjectCountOfLocation", 1)
 	mockDb.AssertNumberOfCalls(ts.T(), "GetSizeAndObjectCountOfLocation", 1)
 }
 
