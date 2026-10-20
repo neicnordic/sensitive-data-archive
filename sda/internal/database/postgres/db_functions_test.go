@@ -689,6 +689,11 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	err = ts.db.SetAccessionID(context.Background(), "accessionID-disabled", disabledFileID)
 	assert.NoError(ts.T(), err, "failed to set accession id for disabled file")
 
+	removedFileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", fmt.Sprintf("%v/submission_b/TestGetUserFiles-removed.c4gh", testUser), testUser)
+	assert.NoError(ts.T(), err, "failed to register removed file in database")
+	err = ts.db.UpdateFileEventLog(context.Background(), removedFileID, "removed", "api", "{}", "{}")
+	assert.NoError(ts.T(), err, "failed to set file as removed in database")
+
 	filelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), "unknownuser", "", true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(ts.T(), filelist, "file list of unknown user is not empty")
@@ -696,17 +701,25 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 
 	filelist, _, err = ts.db.GetUserFiles(context.Background(), testUser, "", true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get file list")
-	assert.Equal(ts.T(), testCases, len(filelist), "file list is of incorrect length")
+	assert.Equal(ts.T(), testCases+1, len(filelist), "file list is of incorrect length")
 
+	foundDisabled := false
 	for _, fileInfo := range filelist {
+		assert.NotEqual(ts.T(), removedFileID, fileInfo.FileID, "removed files should not be returned")
+		if fileInfo.FileID == disabledFileID {
+			foundDisabled = true
+			assert.Equal(ts.T(), "disabled", fileInfo.Status, "incorrect file status")
+
+			continue
+		}
 		assert.Equal(ts.T(), "ready", fileInfo.Status, "incorrect file status")
 		assert.Contains(ts.T(), fileInfo.AccessionID, "accessionID-00", "incorrect file accession ID")
-		assert.NotEqual(ts.T(), disabledFileID, fileInfo.FileID, "disabled files should not be returned")
 	}
+	assert.True(ts.T(), foundDisabled, "disabled file should be returned")
 
 	filteredFilelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get file list")
-	assert.Equal(ts.T(), 3, len(filteredFilelist), "file list is of incorrect length")
+	assert.Equal(ts.T(), 4, len(filteredFilelist), "file list is of incorrect length")
 	assert.Equal(ts.T(), "", nextCursor)
 
 	// Verify keyset pagination: use a page size smaller than the total to force multiple pages.
@@ -732,7 +745,7 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 		}
 	}
 
-	assert.Equal(ts.T(), testCases, len(seen), "pagination did not return all files without duplicates")
+	assert.Equal(ts.T(), testCases+1, len(seen), "pagination did not return all files without duplicates")
 
 	// An invalid cursor must return ErrInvalidCursor.
 	_, _, err = ts.db.GetUserFiles(context.Background(), testUser, "", true, pageLimit, "not-a-valid-cursor!!!")

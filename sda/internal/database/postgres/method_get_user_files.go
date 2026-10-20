@@ -24,7 +24,7 @@ func init() {
 FROM sda.files AS f
 	LEFT JOIN sda.file_dataset AS fd ON fd.file_id = f.id
  WHERE f.submission_user = $1
-	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
+	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') <> 'removed'
 	AND f.id > $2::UUID
 ORDER BY f.id ASC LIMIT $3;`
 
@@ -37,7 +37,7 @@ FROM sda.files AS f
  WHERE f.submission_user = $1
 	AND f.submission_file_path COLLATE "C" >= $4::TEXT
 	AND f.submission_file_path COLLATE "C" < $4::TEXT || chr(1114111)
-	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') NOT IN ('disabled', 'removed')
+	AND fd.file_id IS NULL AND COALESCE(f.last_event, '') <> 'removed'
 	AND f.id > $2::UUID
 ORDER BY f.id ASC LIMIT $3;`
 }
