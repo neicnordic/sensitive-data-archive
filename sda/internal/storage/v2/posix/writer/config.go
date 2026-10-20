@@ -61,20 +61,25 @@ func loadConfig(backendName string) ([]*endpointConfig, error) {
 }
 
 func (endpointConf *endpointConfig) isUsable(ctx context.Context, backendName string, locationBroker locationbroker.LocationBroker) (bool, error) {
-	count, err := locationBroker.GetObjectCount(ctx, backendName, endpointConf.Path)
-	if err != nil {
-		return false, err
-	}
-	if count >= endpointConf.MaxObjects && endpointConf.MaxObjects > 0 {
-		return false, nil
+	// Only ask the location broker, whose database lookup can be slow, for the limits that are set
+	if endpointConf.MaxObjects > 0 {
+		count, err := locationBroker.GetObjectCount(ctx, backendName, endpointConf.Path)
+		if err != nil {
+			return false, err
+		}
+		if count >= endpointConf.MaxObjects {
+			return false, nil
+		}
 	}
 
-	size, err := locationBroker.GetSize(ctx, backendName, endpointConf.Path)
-	if err != nil {
-		return false, err
-	}
-	if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
-		return false, nil
+	if endpointConf.maxSizeBytes > 0 {
+		size, err := locationBroker.GetSize(ctx, backendName, endpointConf.Path)
+		if err != nil {
+			return false, err
+		}
+		if size >= endpointConf.maxSizeBytes {
+			return false, nil
+		}
 	}
 
 	return true, nil

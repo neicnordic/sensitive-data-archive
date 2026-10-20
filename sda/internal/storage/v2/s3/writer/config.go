@@ -233,23 +233,32 @@ func (endpointConf *endpointConfig) findActiveBucket(ctx context.Context, backen
 
 	sortBucketsNumerically(bucketsWithPrefix, endpointConf.BucketPrefix)
 
+	// Without limits every bucket has room, so skip the location broker, whose database lookup can be slow
+	if endpointConf.MaxObjects == 0 && endpointConf.maxSizeBytes == 0 {
+		return bucketsWithPrefix[0], nil
+	}
+
 	// find first bucket with available object count and size
 	for _, bucket := range bucketsWithPrefix {
 		loc := endpointConf.Endpoint + "/" + bucket
-		count, err := locationBroker.GetObjectCount(ctx, backendName, loc)
-		if err != nil {
-			return "", fmt.Errorf("failed to get object count of location %s, due to %v", loc, err)
-		}
-		if count >= endpointConf.MaxObjects && endpointConf.MaxObjects > 0 {
-			continue
+		if endpointConf.MaxObjects > 0 {
+			count, err := locationBroker.GetObjectCount(ctx, backendName, loc)
+			if err != nil {
+				return "", fmt.Errorf("failed to get object count of location %s, due to %v", loc, err)
+			}
+			if count >= endpointConf.MaxObjects {
+				continue
+			}
 		}
 
-		size, err := locationBroker.GetSize(ctx, backendName, loc)
-		if err != nil {
-			return "", fmt.Errorf("failed to get size of location %s, due to %v", loc, err)
-		}
-		if size >= endpointConf.maxSizeBytes && endpointConf.maxSizeBytes > 0 {
-			continue
+		if endpointConf.maxSizeBytes > 0 {
+			size, err := locationBroker.GetSize(ctx, backendName, loc)
+			if err != nil {
+				return "", fmt.Errorf("failed to get size of location %s, due to %v", loc, err)
+			}
+			if size >= endpointConf.maxSizeBytes {
+				continue
+			}
 		}
 
 		return bucket, nil
