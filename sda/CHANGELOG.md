@@ -7,11 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [4.0.2-hotfix-2] - 2026-10-20
+
 ### Fixed
 
-- api: successful admin calls had no audit trail from v3.1.75 through 4.0.2-hotfix-1 (released as v4.0.3); only failed authentication and denied requests were logged. Every request behind authentication now writes one `"type":"audit"` JSON event to stdout with the user, method, path, status and a correlation id, independent of the log level, in the same schema as the download service. Log filters that match the old `"audit": true` field must be updated. The `api.audit` option is gone, audit logging in the api cannot be turned off, and the request log line now reports the real `status_code` instead of always 200 (#2687, #2656). The audit logger shared by api and download also no longer stops writing for good after one failed write to stdout; a failed write is reported in the application log instead.
+- api: successful admin calls had no audit trail from v3.1.75 through 4.0.2-hotfix-1; only failed authentication and denied requests were logged. Every request behind authentication now writes one `"type":"audit"` JSON event to stdout with the user, method, path, status and a correlation id, independent of the log level, in the same schema as the download service. Log filters that match the old `"audit": true` field must be updated. The `api.audit` option is gone, audit logging in the api cannot be turned off, and the request log line now reports the real `status_code` instead of always 200 (#2687, #2656). The audit logger shared by api and download also no longer stops writing for good after one failed write to stdout; a failed write is reported in the application log instead.
 
-## [4.0.3] - 2026-10-09
+## [4.0.2-hotfix-1] - 2026-10-09
 
 ### Fixed
 
