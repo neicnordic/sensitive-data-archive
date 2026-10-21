@@ -14,7 +14,7 @@
 # Adding an image or a new version takes two PRs:
 #   1. add the line here and merge; wait for the mirror workflow on main to succeed
 #   2. point a compose file at the new mirror tag
-# A new minor or major version gets a new mirror tag. Tags such as python:3.11-slim or golang:1.25-alpine
+# A new minor or major version gets a new mirror tag. Tags such as python:3.14-slim-trixie or golang:1.25-alpine
 # move with patch releases; bumping such a line only changes its digest, which is only tested after merge.
 #
 # Nothing updates these images automatically (Dependabot does not read this file).
@@ -28,14 +28,10 @@ golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cda
 maven:3.9.9-eclipse-temurin-21@sha256:3a4ab3276a087bf276f79cae96b1af04f53731bec53fb2e651aca79e4b10211e maven-3.9.9-eclipse-temurin-21
 mysql/mysql-server:8.0.32-1.2.11-server@sha256:d6c8301b7834c5b9c2b733b10b7e630f441af7bc917c74dba379f24eeeb6a313 mysql-mysql-server-8.0.32-1.2.11-server
 postgres:15.4-alpine@sha256:35ce2187f2f7fb75e8e79493e13743596c21eb3789ff41ece145ae04d06e93a5 postgres-15.4-alpine
-python:3.10-slim@sha256:6ff506466f8b1e981719b468cc0023b8ef000b983cdec0eafe119d01f379e31d python-3.10-slim
-python:3.11-slim@sha256:e88e9763f943ec1834f992a4b51e0f24500486803e8bc534e5767af9ea65f6ce python-3.11-slim
-python:3.11-slim-bookworm@sha256:0a310eeecf4e1f5a0743f9a6520c90c88d089c903ca5fd283f501e3a805f5f89 python-3.11-slim-bookworm
-python:3.13-slim-trixie@sha256:70729b46c69b4f1e97c4822c1af3df53a1476cf5ddc6c087c0c10bc3a5678c2f python-3.13-slim-trixie
+python:3.14-slim-trixie@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a python-3.14-slim-trixie
 grafana/tempo:3.0.2@sha256:cda87c212d8c584dc0b89e337e7ed648a5100feb657e5d528480ee4fa03dbbe3 grafana-tempo-3.0.2
 prom/prometheus:v3.14.0@sha256:5ce7540c3c00ef4ab0c9d2c995c6a5b9c421f44b4a115d97a2c7af3b1c21cbb0 prom-prometheus-v3.14.0
 grafana/grafana-enterprise:13.2.1@sha256:a297072de9f2f02e52166cf853281d1478e94d738e4e1905938c4257f59d88b3 grafana-grafana-enterprise-13.2.1
 quay.io/ceph/vstart-cluster:19.2.6@sha256:e07ed915d5f253c8926fdc5862cd739e6f4cf404b5aea6474371aa0837df89bb ceph-vstart-cluster-19.2.6
-python:3.8-slim@sha256:1d52838af602b4b5a831beb13a0e4d073280665ea7be7f69ce2382f29c5a613f python-3.8-slim
 neicnordic/openssl-alpine:latest@sha256:112ec002013bcb821a33163e01584664f9ef729d348ebbaa0975532f224c77ff neicnordic-openssl-alpine-sha-112ec002013b
 neicnordic/pg-client:latest@sha256:52f4bc3ba309714d1ea8bb5093ab98c0cddff31d2991ff91bd2f27a3ba3d4e00 neicnordic-pg-client-sha-52f4bc3ba309
