@@ -16,7 +16,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim-bookworm
+    image: python:3.13-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared

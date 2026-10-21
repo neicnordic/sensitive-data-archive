@@ -73,7 +73,7 @@ services:
         pip install aiohttp Authlib joserfc > /dev/null
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.10-slim
+    image: python:3.13-slim-trixie
     volumes:
       - ./scripts/mockoidc.py:/mockoidc.py
     ports:

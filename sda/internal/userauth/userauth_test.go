@@ -59,7 +59,7 @@ func TestMain(m *testing.M) {
 	// pulls an image, creates a container based on it and runs it
 	oidc, err := pool.RunWithOptions(&dockertest.RunOptions{
 		Repository: "python",
-		Tag:        "3.10-slim",
+		Tag:        "3.13-slim-trixie",
 		Cmd: []string{
 			"/bin/sh",
 			"-c",

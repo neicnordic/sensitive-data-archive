@@ -30,7 +30,7 @@ services:
       - PGSSLROOTCERT=/certs/ca.crt
       - PGSSLCERT=/certs/client.crt
       - PGSSLKEY=/certs/client.key
-    image: python:3.11-slim
+    image: python:3.13-slim-trixie
     volumes:
       - ./scripts:/scripts
       - client_certs:/certs
