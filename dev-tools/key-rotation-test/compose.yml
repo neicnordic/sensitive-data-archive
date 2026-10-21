@@ -56,7 +56,7 @@ services:
 
   # Generates keys and handles bulk DB configuration for all pipeline roles
   credentials:
-    image: python:3.13-slim-trixie
+    image: python:3.14-slim-trixie
     container_name: credentials
     command:
       - "/bin/sh"

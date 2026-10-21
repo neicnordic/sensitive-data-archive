@@ -83,7 +83,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.13-slim-trixie
+    image: python:3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -172,7 +172,7 @@ services:
         pip install aiohttp Authlib joserfc > /dev/null
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.13-slim-trixie
+    image: python:3.14-slim-trixie
     volumes:
       - ./scripts/mockoidc.py:/mockoidc.py
     ports:
