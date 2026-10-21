@@ -39,7 +39,7 @@ services:
 
   mockauth:
     container_name: mockauth
-    image: python:3.13-slim-trixie
+    image: python:3.14-slim-trixie
     ports:
       - 8000:8000
     environment:

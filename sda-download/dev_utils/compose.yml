@@ -189,7 +189,7 @@ services:
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.13-slim-trixie
+    image: python:3.14-slim-trixie
     healthcheck:
       test: [ "CMD", "curl", "-fkq", "https://localhost:8000/.well-known/openid-configuration" ]
       interval: 10s
