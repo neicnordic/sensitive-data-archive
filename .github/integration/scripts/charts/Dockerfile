@@ -1,4 +1,4 @@
-FROM python:3.14-slim-trixie
+FROM ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
 
 COPY .github/integration/sda/oidc.py .
 RUN pip install --upgrade pip && pip install aiohttp Authlib joserfc requests && sed -i 's/localhost/oidc/g' oidc.py
