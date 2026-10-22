@@ -3,7 +3,7 @@
 # ports and S3_BUCKETS as needed. See scripts/ceph/ceph-rgw.sh for the details.
 services:
   ceph:
-    image: quay.io/ceph/vstart-cluster:19.2.6
+    image: ghcr.io/neicnordic/sda-ci-mirror:ceph-vstart-cluster-19.2.6
     entrypoint: ["/scripts/ceph-rgw.sh"]
     # vstart occasionally fails during startup; the script handles a restart
     # and the healthcheck window is long enough for a second attempt.

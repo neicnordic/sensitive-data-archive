@@ -27,7 +27,7 @@ services:
                         -passout pass:"$${KEYSTORE_PASSWORD}"
 
     container_name: certfixer
-    image: neicnordic/openssl-alpine:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:neicnordic-openssl-alpine-sha-112ec002013b
     volumes:
       - ./certs:/origcerts
       - certs:/tls-certs
@@ -70,7 +70,7 @@ services:
       retries: 3
 
   cega:
-    image: "egarchive/lega-base:release.v0.2.0"
+    image: ghcr.io/neicnordic/sda-ci-mirror:egarchive-lega-base-release.v0.2.0
     depends_on:
       - certfixer
     command:

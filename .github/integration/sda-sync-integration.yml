@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -275,7 +275,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -352,7 +352,7 @@ services:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
       - SYNCTEST=true
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     profiles:
       - tests
     volumes:

@@ -11,13 +11,13 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
 
   tempo:
-    image: grafana/tempo:3.0.2
+    image: ghcr.io/neicnordic/sda-ci-mirror:grafana-tempo-3.0.2
     container_name: tempo
     command: [ "-config.file=/etc/tempo.yaml" ]
     volumes:
@@ -29,7 +29,7 @@ services:
 
   prometheus:
     container_name: prometheus
-    image: prom/prometheus:v3.14.0
+    image: ghcr.io/neicnordic/sda-ci-mirror:prom-prometheus-v3.14.0
     command:
       - --config.file=/etc/prometheus/prometheus.yml
       - --web.enable-remote-write-receiver
@@ -41,7 +41,7 @@ services:
       - 9090:9090
 
   grafana:
-    image: grafana/grafana-enterprise:13.2.1
+    image: ghcr.io/neicnordic/sda-ci-mirror:grafana-grafana-enterprise-13.2.1
     depends_on:
       tempo:
         condition: service_started
@@ -398,7 +398,7 @@ services:
     environment:
       - CEGA_USERS_PASSWORD=test
       - CEGA_USERS_USER=test
-    image: "egarchive/lega-base:release.v0.2.0"
+    image: ghcr.io/neicnordic/sda-ci-mirror:egarchive-lega-base-release.v0.2.0
     ports:
       - "8443:8443"
     volumes:
@@ -521,7 +521,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -565,7 +565,7 @@ services:
     environment:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     profiles:
       - tests
     volumes:

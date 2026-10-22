@@ -4,7 +4,7 @@ services:
       - /bin/sh
       - /scripts/make_certs.sh
     container_name: certfixer
-    image: alpine:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:alpine-3.24.2
     volumes:
       - ./scripts:/scripts
       - certs:/certs
@@ -24,7 +24,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:ubuntu-26.04
     volumes:
       - ./scripts:/scripts
 
@@ -126,7 +126,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: ubuntu:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:ubuntu-26.04
     profiles:
       - tests
     volumes:
