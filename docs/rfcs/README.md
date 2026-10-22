@@ -154,3 +154,4 @@ a `proposed` ADR; it is a separate artifact with its own lifecycle.
 | [0002](0002-separate-visa-authorization-service.md) | Separate Visa Authorization Service? | exploring | - |
 | [0003](0003-rename-api-app.md) | Rename the API app | exploring | - |
 | [0004](0004-plan-releases.md) | Plan releases for the SDA GO applications | exploring | - |
+| [0005](0005-cors-application-layer-or-edge.md) | Where to handle CORS for browser clients: application layer or edge | exploring | - |
