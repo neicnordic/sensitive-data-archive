@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/base64"
@@ -22,12 +23,14 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/model/headers"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // maxHeaderBytes caps how much of an inbox file ReadHeader may buffer, far above
@@ -39,7 +42,32 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx, span := observability.StartSpan(r.Context(), "rbac")
 		defer span.End()
-		r = r.WithContext(ctx)
+
+		rec := &statusRecorder{ResponseWriter: w}
+		w = rec
+		// Path only: the query can carry an access_token. Handlers that take the file id
+		// from the query or the body set FileID themselves.
+		event := &audit.Event{
+			Event:         audit.EventAPIRequest,
+			Method:        r.Method,
+			Path:          r.URL.Path,
+			FileID:        r.PathValue("fileid"),
+			DatasetID:     cmp.Or(r.PathValue("datasetid"), r.PathValue("dataset")), // verify names it {dataset}
+			CorrelationID: span.SpanContext().TraceID().String(),
+		}
+		r = r.WithContext(audit.NewContext(ctx, event))
+		// One audit event per request, also on the error exits and when the handler panics.
+		defer func() {
+			p := recover()
+			event.HTTPStatus = rec.code()
+			if p != nil && rec.status == 0 {
+				event.HTTPStatus = http.StatusInternalServerError
+			}
+			api.auditLogger.Log(r.Context(), *event)
+			if p != nil {
+				panic(p)
+			}
+		}()
 
 		token, err := api.auth.Authenticate(r)
 		if err != nil {
@@ -50,6 +78,7 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		subject := token.Subject()
+		event.UserID = subject
 		urlPath := r.URL.Path
 		method := r.Method
 
@@ -92,12 +121,51 @@ func (api *API) recoveryMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (api *API) loggingMiddleware(next http.Handler) http.Handler {
-	type responseWriter struct {
-		http.ResponseWriter
-		statusCode int
+// statusRecorder records the status code a handler writes.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (w *statusRecorder) WriteHeader(code int) {
+	// 1xx responses other than 101 are not final, so only a later code is the status the client gets.
+	if w.status == 0 && (code >= http.StatusOK || code == http.StatusSwitchingProtocols) {
+		w.status = code
+	}
+	w.ResponseWriter.WriteHeader(code)
+}
+
+func (w *statusRecorder) Write(b []byte) (int, error) {
+	if w.status == 0 {
+		w.status = http.StatusOK
 	}
 
+	return w.ResponseWriter.Write(b)
+}
+
+// Flush commits the response, so a later WriteHeader no longer changes the status.
+func (w *statusRecorder) Flush() {
+	if w.status == 0 {
+		w.status = http.StatusOK
+	}
+	// http.Flusher has no error result; a failed flush shows up on the handler's next Write.
+	_ = http.NewResponseController(w.ResponseWriter).Flush()
+}
+
+func (w *statusRecorder) Unwrap() http.ResponseWriter {
+	return w.ResponseWriter
+}
+
+// code returns the recorded status, or 200 which net/http sends when the handler wrote nothing.
+func (w *statusRecorder) code() int {
+	if w.status == 0 {
+		return http.StatusOK
+	}
+
+	return w.status
+}
+
+func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ready" {
 			next.ServeHTTP(w, r)
@@ -105,7 +173,7 @@ func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		rw := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		rw := &statusRecorder{ResponseWriter: w}
 		start := time.Now()
 		next.ServeHTTP(rw, r)
 
@@ -115,9 +183,10 @@ func (api *API) loggingMiddleware(next http.Handler) http.Handler {
 			slog.String("method", r.Method),
 			slog.String("path", r.URL.Path),
 			slog.String("remote_addr", r.RemoteAddr),
-			slog.Int("status_code", rw.statusCode),
+			slog.Int("status_code", rw.code()),
 			slog.Duration("duration", time.Since(start)),
 			slog.Time("time", start),
+			slog.String("trace-id", oteltrace.SpanFromContext(r.Context()).SpanContext().TraceID().String()),
 		)
 	})
 }
@@ -342,6 +411,7 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 	)
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 
 	switch {
 	case fileID != "" && r.ContentLength > 0:
@@ -414,6 +484,10 @@ func (api *API) ingestFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = ingest.FilePath
+	auditEvent.SubmissionUser = ingest.User
 
 	ingestMessage := broker.Message{Key: fileID, Body: marshaledMsg}
 	if err := api.mq.Publish(ctx, "ingest", ingestMessage); err != nil {
@@ -444,6 +518,7 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 	)
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 
 	switch {
 	case fileID != "" && r.ContentLength > 0:
@@ -517,6 +592,11 @@ func (api *API) cancelFile(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+
+	auditEvent := audit.FromContext(r.Context())
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = cancel.FilePath
+	auditEvent.SubmissionUser = cancel.User
 
 	archiveData, err := api.db.GetArchived(r.Context(), fileID)
 	if err != nil {
@@ -744,6 +824,7 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 	var err error
 
 	fileID := r.URL.Query().Get("fileid")
+	audit.FromContext(r.Context()).FileID = fileID // names the target also when the request is rejected
 	accessionID := r.URL.Query().Get("accessionid")
 	hasQuery := fileID != "" || accessionID != ""
 	hasBody := r.ContentLength > 0
@@ -832,6 +913,10 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	auditEvent := audit.FromContext(ctx)
+	auditEvent.FileID = fileID
+	auditEvent.FilePath = accession.FilePath
+	auditEvent.AccessionID = accession.AccessionID
 
 	if err := api.mq.Publish(ctx, "accession", broker.Message{Key: fileID, Body: marshaledMsg}); err != nil {
 		span.Error("failed to publish accession message", err)
@@ -958,6 +1043,7 @@ func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
+	audit.FromContext(ctx).DatasetID = dataset.DatasetID
 
 	mappingsMessage := broker.Message{Key: "", Headers: nil, Body: marshaledMsg}
 	if err := api.mq.Publish(ctx, "mappings", mappingsMessage); err != nil {

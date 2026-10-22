@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- api: successful admin calls had no audit trail from v3.1.75 through v4.0.3; only failed authentication and denied requests were logged. Every request behind authentication now writes one `"type":"audit"` JSON event to stdout with the user, method, path, status and trace id, independent of the log level, in the same schema as the download service. Log filters that match the old `"audit": true` field must be updated. The `api.audit` option is gone, audit logging in the api cannot be turned off, and the request log line now reports the real `status_code` instead of always 200 (#2687, #2656). The audit logger shared by api and download also no longer stops writing for good after one failed write to stdout; a failed write is reported in the application log instead.
 - download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
 - s3inbox: Check if the bucket exists before trying to create it.
 - download: a JWT signed with a key that is not in the loaded key set, for example after the issuer rotates its keys, is no longer rejected until a restart. The JWKS is refetched from `jwt.pubkey-url`, at most once per minute and with a 10 s timeout, and verification is retried once.
