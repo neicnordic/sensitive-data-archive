@@ -18,6 +18,9 @@
 # move with patch releases; bumping such a line only changes its digest, which is only tested after merge.
 #
 # Nothing updates these images automatically (Dependabot does not read this file).
+#
+# Removing a line stops the copy but leaves the tag in the mirror, since older and hotfix branches may still
+# pull it. To delete an image, an admin removes that version in the sda-ci-mirror package settings.
 
 alpine:3.24.2@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 alpine-3.24.2
 ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944 ubuntu-26.04
