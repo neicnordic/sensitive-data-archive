@@ -60,7 +60,7 @@ require (
 require (
 	dario.cat/mergo v1.0.0 // indirect
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20261006220739-8c912ac31dd4 // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
 	github.com/Nvveen/Gotty v0.0.0-20120604004816-cd527374f1e5 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.18 // indirect
@@ -92,11 +92,13 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
+	github.com/containerd/errdefs v1.0.0 // indirect
+	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/dchest/bcrypt_pbkdf v0.0.0-20150205184540-83f37f9c154a // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
-	github.com/docker/cli v27.4.1+incompatible // indirect
-	github.com/docker/docker v27.1.1+incompatible // indirect
-	github.com/docker/go-connections v0.5.0 // indirect
+	github.com/distribution/reference v0.6.0 // indirect
+	github.com/docker/cli v29.2.0+incompatible // indirect
+	github.com/docker/go-connections v0.8.2 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
@@ -112,7 +114,6 @@ require (
 	github.com/go-playground/validator/v10 v10.30.3 // indirect
 	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
-	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
@@ -128,13 +129,15 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/minio/sha256-simd v0.1.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
+	github.com/moby/moby/api v1.56.1 // indirect
+	github.com/moby/moby/client v0.6.2 // indirect
 	github.com/moby/sys/user v0.3.0 // indirect
-	github.com/moby/term v0.5.0 // indirect
+	github.com/moby/term v0.5.2 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.2.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.4.3 // indirect
 	github.com/prometheus/client_golang v1.24.1 // indirect
@@ -180,6 +183,5 @@ require (
 	golang.org/x/text v0.41.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260825221802-da73d73af1c5 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260825221802-da73d73af1c5 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools v2.2.0+incompatible // indirect
 )
