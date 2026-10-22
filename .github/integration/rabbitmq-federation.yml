@@ -15,7 +15,7 @@ services:
       interval: 5s
       timeout: 20s
       retries: 3
-    image: rabbitmq:3.11.11-management-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:rabbitmq-3.11.11-management-alpine
     ports:
       - "15671:15671"
     restart: always
@@ -33,7 +33,7 @@ services:
         /scripts/make_certs.sh &&
         chmod 644 /client_certs/client.key
     container_name: certfixer
-    image: alpine:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:alpine-3.24.2
     volumes:
       - ./scripts:/scripts
       - certs:/certs
@@ -53,7 +53,7 @@ services:
         condition: service_started
       rabbitmq:
         condition: service_healthy
-    image: debian:stable-slim
+    image: ghcr.io/neicnordic/sda-ci-mirror:debian-stable-20261005-slim
     profiles:
       - federation
     volumes:

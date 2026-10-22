@@ -16,7 +16,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -24,7 +24,7 @@ services:
 
   database_init:
     container_name: database_init
-    image: postgres:15.4-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:postgres-15.4-alpine
     command:
       - "/bin/sh"
       - "-c"
@@ -104,7 +104,7 @@ services:
 
   validator-orchestrator_init:
     container_name: validator-orchestrator_init
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     depends_on:
       credentials:
         condition: service_completed_successfully
@@ -322,7 +322,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -341,7 +341,7 @@ services:
         condition: service_started
     extra_hosts:
       - "localhost:host-gateway"
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     profiles:
       - tests
     volumes:

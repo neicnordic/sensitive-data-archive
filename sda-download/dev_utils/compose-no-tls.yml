@@ -19,7 +19,7 @@ services:
 
   database_user_creation:
     container_name: database_user_creation
-    image: postgres:15.4-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:postgres-15.4-alpine
     command:
       - "/bin/sh"
       - "-c"
@@ -128,7 +128,7 @@ services:
         pip install aiohttp Authlib
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     healthcheck:
       test: [ "CMD", "curl", "-fkq", "http://localhost:8000/.well-known/openid-configuration" ]
       interval: 10s

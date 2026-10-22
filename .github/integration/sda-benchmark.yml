@@ -73,7 +73,7 @@ services:
         pip install aiohttp Authlib joserfc > /dev/null
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.14-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts/mockoidc.py:/mockoidc.py
     ports:
@@ -110,7 +110,7 @@ services:
       - BENCHMARK_MODE=${BENCHMARK_MODE:-endpoint-e2e}
       - VERIFY_PRIVATE_KEY_PATH=${VERIFY_PRIVATE_KEY_PATH:-/shared/c4gh.sec.pem}
       - VERIFY_PRIVATE_KEY_PASSPHRASE=${VERIFY_PRIVATE_KEY_PASSPHRASE:-c4ghpass}
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     profiles:
       - benchmark
     volumes:
