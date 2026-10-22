@@ -113,7 +113,7 @@ deploy_ceph_rgw() {
       "spec": {
         "containers": [{
           "name": "rgw",
-          "image": "quay.io/ceph/vstart-cluster:19.2.6",
+          "image": "ghcr.io/neicnordic/sda-ci-mirror:ceph-vstart-cluster-19.2.6",
           "command": ["/scripts/ceph-rgw.sh"],
           "env": [$tls_env],
           "envFrom": [{"secretRef": {"name": "ceph-rgw-credentials"}}],

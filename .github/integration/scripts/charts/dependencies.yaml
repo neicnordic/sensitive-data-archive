@@ -172,7 +172,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: cega-nss
-        image: egarchive/lega-base:release.v0.2.0
+        image: ghcr.io/neicnordic/sda-ci-mirror:egarchive-lega-base-release.v0.2.0
         command: ["python", "/cega/users.py", "0.0.0.0", "8443", "/cega/users.json"]
         env:
           - name: CEGA_USERS_PASSWORD
