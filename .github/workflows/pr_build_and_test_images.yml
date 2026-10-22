@@ -151,6 +151,16 @@ jobs:
           header: ${{ matrix.name }} Trivy results
           path: trivy-comment.md
 
+  check_mirror:
+    name: Check CI image mirror
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Check that the integration stacks only use mirrored images
+        run: bash .github/integration/scripts/check_mirror.sh
+
   rabbitmq_test_federated:
     needs:
       - build_images
