@@ -308,6 +308,10 @@ func (db *pgDb) GetSyncData(ctx context.Context, accessionID string) (*database.
 	return db.getSyncData(ctx, nil, accessionID)
 }
 
+func (db *pgDb) CheckIfFileInDataset(ctx context.Context, datasetID, accessionID string) (bool, error) {
+	return db.checkIfFileInDataset(ctx, nil, datasetID, accessionID)
+}
+
 func (db *pgDb) CheckIfDatasetExists(ctx context.Context, datasetID string) (bool, error) {
 	return db.checkIfDatasetExists(ctx, nil, datasetID)
 }
@@ -410,4 +414,7 @@ func (db *pgDb) SetBackedUp(ctx context.Context, location, path, fileID string) 
 
 func (db *pgDb) GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error) {
 	return db.getFileIDInInbox(ctx, nil, submissionUser, filePath)
+}
+func (db *pgDb) RemoveFileFromDataset(ctx context.Context, datasetID, accessionID string) error {
+	return db.removeFileFromDataset(ctx, nil, datasetID, accessionID)
 }

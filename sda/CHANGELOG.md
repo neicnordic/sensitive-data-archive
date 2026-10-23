@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Add tracing in the storage reader/writer libraries for s3 and posix
 - Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
   - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
+- api: new API `/dataset/{datasetID}/files/{accessionID}` to request a file to be removed from a dataset
+- Add new schemas for dataset file removal messages
+- Add new database func: `CheckIfFileInDataset` to check if a file accession id is associated with a dataset accession id
+- Add new database func: `RemoveFileFromDataset` to remove association between a file and a dataset
+- mapper: add handling of dataset file removal message
+- Add new dataset event type: `file_removed` to be used to indicate a file has been removed from a dataset
+  - After a file removal the dataset should be released again to indicate that the desired modifications are complete and dataset should be available for download, etc again.
+  - If dataset is already deprecated allow file removal but do not "undeprecate" dataset with a file_removed event  
 
 ### Changed
 
@@ -23,6 +31,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - auth: replace the unmaintained Iris web framework with `net/http`, which unblocks the move to Go 1.27. Routes, templates and configuration are unchanged. The `_session_id` cookie is now only set when there is a message or s3cmd config to carry to the next request, it expires after 10 minutes instead of never, and it is marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https; previously every request, including probes, started a session that was kept in memory for the lifetime of the pod. CORS preflight requests are now answered when `cors.origins` is set, a request with the wrong method, including `HEAD`, gets `405` instead of `404`, a path with a trailing slash such as `/oidc/` gets `404` instead of a redirect, and the HTTPS server now has the same timeouts as the HTTP one, with a 30 second write timeout for both.
 - auth: the `state` cookie is only marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https, so the OIDC login works over plain HTTP (#1101).
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
+- api: update /dataset/${datasetID}/release to only reject requests when the dataset has `deprecated`, or `released` status
+  - i.e. allow triggering release of datasets with statuses: `registered`, and `file_removed`
 
 ### Fixed
 

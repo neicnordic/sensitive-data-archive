@@ -209,6 +209,28 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
     ```
 
+- `/dataset/*dataset/files/{accessionID}`
+  - accepts `DELETE` requests with the dataset accession id and a file accession id as parts of the path`
+  - Requests to remove the association between the file and the dataset.
+    The file itself is not deleted and must be deleted / disabled independently of the dataset if desired.
+    A successful response indicates that the request has been queued,
+    it does not mean the file has already been removed from the dataset.
+    After a file removal the dataset should be released again to indicate that the desired modifications are complete
+    and dataset should be available for download, etc again.
+
+  - Error codes
+    - `202` Removal request accepted and queued for processing
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `404` Dataset not found or file is not associated with the dataset
+    - `500` Internal error due to DB or MQ failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" -X DELETE  https://HOSTNAME/dataset/my-dataset-01/files/aa-file-123
+    ```
+
 - `/dataset/verify/*dataset`
   - accepts `PUT` requests with the dataset name as last part of the path`
   - triggers reverification of all files in the dataset.
