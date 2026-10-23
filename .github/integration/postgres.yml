@@ -133,6 +133,7 @@ services:
       - ./tests:/tests
       - client_certs:/certs
       - ../../postgresql/migratedb.d:/migratedb.d
+      - pgmigrate:/pgmigrate:ro
 
 volumes:
   certs:

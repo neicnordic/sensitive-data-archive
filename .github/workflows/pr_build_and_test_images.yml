@@ -185,6 +185,16 @@ jobs:
       - name: Test postgres
         run: docker compose -f .github/integration/postgres.yml run tests
 
+      - name: Migration timings
+        if: always()
+        run: |
+          {
+            echo "| script | runs | seconds |"
+            echo "|---|---|---|"
+            docker exec migrate cat /var/lib/postgresql/data/migration_timings.log |
+              awk '{ runs[$2]++; secs[$2]+=$3 } END { for (s in runs) print "| " s " | " runs[s] " | " secs[s] " |" }' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
+
   sda_integration_test:
     name: sda ${{ matrix.storage }} integration tests
     needs:
