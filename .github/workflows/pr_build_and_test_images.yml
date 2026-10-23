@@ -4,6 +4,10 @@ on:
   merge_group:
   schedule:
     - cron: "0 2 * * *" # Every stack, every night, on main
+# A new push to a PR cancels its older run; queue and nightly runs are never cancelled
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 env:
   # Image tag for the triggered integration tests; queue and nightly runs have no PR number
   PR_NUMBER: ${{ github.event.number || format('mq{0}', github.run_id) }}
