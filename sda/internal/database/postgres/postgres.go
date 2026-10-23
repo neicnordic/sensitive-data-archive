@@ -404,6 +404,10 @@ func (db *pgDb) GetSizeAndObjectCountOfLocation(ctx context.Context, location st
 	return db.getSizeAndObjectCountOfLocation(ctx, nil, location)
 }
 
+func (db *pgDb) GetObjectCountOfLocation(ctx context.Context, backend, location string) (uint64, error) {
+	return db.getObjectCountOfLocation(ctx, nil, backend, location)
+}
+
 func (db *pgDb) SetBackedUp(ctx context.Context, location, path, fileID string) error {
 	return db.setBackedUp(ctx, nil, location, path, fileID)
 }

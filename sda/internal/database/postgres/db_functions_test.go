@@ -1824,6 +1824,93 @@ func (ts *DatabaseTests) TestGetSizeAndObjectCountOfLocation() {
 	}
 }
 
+func (ts *DatabaseTests) TestGetObjectCountOfLocation() {
+	for _, test := range []struct {
+		testName string
+
+		filesToRegister []string
+		filesToArchive  []string
+		filesToBackup   []string
+		filesToDataset  []string
+		expectedCount   map[string]uint64 // backend -> count
+	}{
+		{
+			testName:      "NoData",
+			expectedCount: map[string]uint64{"inbox": 0, "archive": 0, "backup": 0},
+		},
+		{
+			testName:        "OnlySubmissionLocationSet",
+			filesToRegister: []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001"},
+			expectedCount:   map[string]uint64{"inbox": 2, "archive": 0, "backup": 0},
+		},
+		{
+			testName:        "SubmissionArchiveAndBackupLocationSet",
+			filesToRegister: []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000004"},
+			filesToArchive:  []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001"},
+			filesToBackup:   []string{"00000000-0000-0000-0000-000000000000"},
+			expectedCount:   map[string]uint64{"inbox": 4, "archive": 2, "backup": 1},
+		},
+		{
+			testName:        "SubmissionArchiveAndBackupLocationSetPartlyDataset",
+			filesToRegister: []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002", "00000000-0000-0000-0000-000000000004"},
+			filesToArchive:  []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001", "00000000-0000-0000-0000-000000000002"},
+			filesToBackup:   []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001"},
+			filesToDataset:  []string{"00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000001"},
+			expectedCount:   map[string]uint64{"inbox": 2, "archive": 3, "backup": 2},
+		},
+	} {
+		ts.T().Run(test.testName, func(t *testing.T) {
+			for _, query := range []string{
+				"DELETE FROM sda.file_event_log",
+				"DELETE FROM sda.file_dataset",
+				"DELETE FROM sda.dataset_event_log",
+				"DELETE FROM sda.datasets",
+				"DELETE FROM sda.checksums",
+				"DELETE FROM sda.files",
+			} {
+				_, err := ts.verificationDB.Exec(query)
+				assert.NoError(t, err)
+			}
+
+			for _, fileID := range test.filesToRegister {
+				_, err := ts.db.RegisterFile(context.Background(), &fileID, "/inbox", "/"+fileID, "user")
+				assert.NoError(t, err)
+				assert.NoError(t, ts.db.SetSubmissionFileSize(context.Background(), fileID, 100))
+			}
+			for _, fileID := range test.filesToArchive {
+				assert.NoError(t, ts.db.SetArchived(context.Background(), "/archive", &database.FileInfo{
+					ArchivedChecksum:  "123",
+					Size:              100,
+					Path:              "/" + fileID,
+					DecryptedChecksum: "321",
+					DecryptedSize:     100,
+					UploadedChecksum:  "abc",
+				}, fileID))
+			}
+			for _, fileID := range test.filesToBackup {
+				assert.NoError(t, ts.db.SetBackedUp(context.Background(), "/backup", "/"+fileID, fileID))
+			}
+			for i, fileID := range test.filesToDataset {
+				assert.NoError(t, ts.db.SetAccessionID(context.Background(), fmt.Sprintf("accession-id-%d", i), fileID))
+				assert.NoError(t, ts.db.MapFileToDataset(context.Background(), "unit-test-dataset-id", fileID, nil))
+			}
+
+			for backend, location := range map[string]string{"inbox": "/inbox", "archive": "/archive", "backup": "/backup"} {
+				count, err := ts.db.GetObjectCountOfLocation(context.Background(), backend, location)
+				assert.NoError(t, err)
+				assert.Equal(t, test.expectedCount[backend], count, backend)
+
+				_, countFromSizeQuery, err := ts.db.GetSizeAndObjectCountOfLocation(context.Background(), location)
+				assert.NoError(t, err)
+				assert.Equal(t, countFromSizeQuery, count, backend)
+			}
+		})
+	}
+
+	_, err := ts.db.GetObjectCountOfLocation(context.Background(), "sync", "/inbox")
+	assert.EqualError(ts.T(), err, "no object count query for backend: sync")
+}
+
 func (ts *DatabaseTests) TestCancelFile() {
 	fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", "/test.file", "user")
 	if err != nil {
