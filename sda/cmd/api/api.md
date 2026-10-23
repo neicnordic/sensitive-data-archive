@@ -208,6 +208,43 @@ Admin endpoints are only available to a set of whitelisted users specified in th
     ```bash
     curl -H "Authorization: Bearer $token" -X POST  https://HOSTNAME/dataset/release/my-dataset-01
     ```
+ 
+- `/dataset/*dataset`
+  - accepts `GET` requests with the dataset accession id as part of the path
+  - Get the state of a dataset
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `404` Dataset not found
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" https://HOSTNAME/dataset/my-dataset-01
+    ```
+
+- `/dataset/*dataset/files`
+  - accepts `GET` requests with the dataset accession id as part of the path
+  - List the files in a dataset.
+    The results are not guaranteed to be consistent across pages if files
+    are added to or removed from the dataset during pagination.
+    Files are ordered by the order they were added to the dataset.
+
+  - Error codes
+    - `200` Query execute ok.
+    - `400` Error due to bad payload.
+    - `401` Token user is not in the list of admins.
+    - `404` Dataset not found
+    - `500` Internal error due to DB failures.
+
+    Example:
+
+    ```bash
+    curl -H "Authorization: Bearer $token" https://HOSTNAME/dataset/my-dataset-01/files
+    ```
 
 - `/dataset/verify/*dataset`
   - accepts `PUT` requests with the dataset name as last part of the path`

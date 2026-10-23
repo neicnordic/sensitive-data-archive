@@ -28,6 +28,7 @@ func (api *API) routes() http.Handler {
 	// Datasets
 	mux.HandleFunc("GET /datasets", api.rbac(api.listDatasets))
 	mux.HandleFunc("GET /dataset/{datasetid}", api.rbac(api.getDataset))
+	mux.HandleFunc("GET /dataset/{datasetid}/files", api.rbac(api.listDatasetFiles))
 	mux.HandleFunc("GET /datasets/list", api.rbac(api.listAllDatasets))
 	mux.HandleFunc("GET /datasets/list/{username}", api.rbac(api.listUserDatasets))
 	mux.HandleFunc("POST /dataset/create", api.rbac(api.createDataset))
