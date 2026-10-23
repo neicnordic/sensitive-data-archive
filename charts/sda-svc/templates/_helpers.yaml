@@ -613,3 +613,56 @@ emits storage config).
 {{- end -}}
 {{- end -}}
 {{- end -}}
+
+
+{{- define "sda.serviceMonitor" -}}
+{{- $app := .app -}}
+{{- with .root }}
+{{- if eq "prometheus" .Values.global.observability.env.OTEL_METRICS_EXPORTER }}
+{{- if .Values.global.observability.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "sda.fullname" . }}-{{ $app }}
+  labels:
+    app.kubernetes.io/name: {{ template "sda.fullname" . }}-{{ $app }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+  {{- with .Values.global.observability.serviceMonitor.labels }}
+  {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- with .Values.global.observability.serviceMonitor.annotations }}
+  annotations:
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ template "sda.fullname" . }}-{{ $app }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace | quote }}
+  endpoints:
+    - port: prometheus
+    {{- with .Values.global.observability.serviceMonitor.interval }}
+      interval: {{ . }}
+    {{- end }}
+    {{- with .Values.global.observability.serviceMonitor.scrapeTimeout }}
+      scrapeTimeout: {{ . }}
+    {{- end }}
+    {{- with .Values.global.observability.serviceMonitor.scheme }}
+      scheme: {{ . | quote }}
+    {{- end }}
+    {{- with .Values.global.observability.serviceMonitor.tlsConfig }}
+      tlsConfig:
+      {{- toYaml . | nindent 8 }}
+    {{- end }}
+{{- with .Values.global.observability.serviceMonitor.targetLabels }}
+  targetLabels:
+  {{- toYaml . | nindent 4 }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}

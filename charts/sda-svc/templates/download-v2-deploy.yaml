@@ -74,7 +74,7 @@ spec:
         env:
         - name: CONFIG_FILE
           value: {{ include "confFile" . }}
-        {{- range $name, $value := .Values.global.observability }}
+        {{- range $name, $value := .Values.global.observability.env }}
         - name: {{ $name }}
           value: {{ $value | quote }}
         {{- end }}
@@ -82,9 +82,9 @@ spec:
         - name: download-v2
           containerPort: 8080
           protocol: TCP
-        {{- if eq "prometheus" .Values.global.observability.OTEL_METRICS_EXPORTER }}
+        {{- if eq "prometheus" .Values.global.observability.env.OTEL_METRICS_EXPORTER }}
         - name: prometheus
-          containerPort: {{ default 9464 .Values.global.observability.OTEL_EXPORTER_PROMETHEUS_PORT }}
+          containerPort: {{ default 9464 .Values.global.observability.env.OTEL_EXPORTER_PROMETHEUS_PORT }}
           protocol: TCP
         {{- end }}
         livenessProbe:

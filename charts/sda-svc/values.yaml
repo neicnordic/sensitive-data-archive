@@ -14,20 +14,36 @@ global:
   tlsPath: "tls"
   jwtPath: "jwt"
 
-  # Observability related environment variable configuration
-  # See https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables
-  observability: {}
+
+  observability:
     # If trace exporting is desired, suggested method is OTEL_TRACES_EXPORTER: "otlp"
-    # Then OTEL_EXPORTER_OTLP_ENDPOINT should also most likely be configured which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo:4318.
+    # Then OTEL_EXPORTER_OTLP_ENDPOINT should also most likely be configured which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo.grafana:4318.
     # See https://opentelemetry.io/docs/specs/otel/protocol/exporter/ for additional OTLP Exporter configurations.
-    # OTEL_TRACES_EXPORTER: "none"
-    # OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo:4318
+    # OTEL_TRACES_EXPORTER: "otlp"
+    # OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo.grafana:4318
     #
     # If metrics exporting is desired, suggested method is OTEL_METRICS_EXPORTER: "prometheus"
     # OTEL_METRICS_EXPORTER: "prometheus"
     # With the "prometheus" exporter the applications which support observability will host a Prometheus endpoint (/metrics) on
     # host: "0.0.0.0" (configurable by OTEL_EXPORTER_PROMETHEUS_HOST), and port: 9464 (configurable by OTEL_EXPORTER_PROMETHEUS_PORT)
-    # Set additional opentelemetry environment variables under this scope as desired, these will be propagated to the applications.
+    # Set additional OpenTelemetry environment variables under this scope as desired, these will be propagated to the applications.
+    # See https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables
+    env: {}
+    serviceMonitor:
+      ## If true, a ServiceMonitor CR is created for a prometheus operator for all sda applications configured to be deployed
+      ## https://github.com/coreos/prometheus-operator
+      ##
+      enabled: false
+      # Note, the following labels are reserved by the helm chart, and should not be overridden
+      # "app", "chart"
+      labels: {}
+      annotations: {}
+      # Set these to override the Prometheus global scrape interval/timeout.
+      interval: ""
+      scrapeTimeout: ""
+      scheme: http
+      targetLabels: []
+      tlsConfig: {}
 
 # Name of an injected config file, located in the secretsPath
 # If the file is located in a subpath it can be set using the confFilePath
@@ -93,7 +109,17 @@ global:
     internalNamespace: ""
     ingressNamespace: ""
     ingressLabelMatch: ""
-    observabilityNamespace: ""
+    # @param global.networkPolicy.prometheusNamespace the namespace to allow prometheus scraping from, required if network policy creation and prometheus exporting enabled
+    prometheusNamespace: ""
+    # @param global.networkPolicy.prometheusPodLabelMatch pod labels (as a "key: value" string) of the prometheus scraper to allow ingress to, e.g. "app.kubernetes.io/name: prometheus"
+    # If empty, ingress on the prometheus ports is allowed to ALL pods in prometheusNamespace
+    prometheusPodLabelMatch: "app.kubernetes.io/name: prometheus"
+    # @param global.networkPolicy.otlpNamespace the namespace to allow otlp egress to, required if network policy creation and otlp tracing exporting enabled
+    # Note, the created network policy only allows the default OTLP ports: 4317, and 4318, if other custom ports are used, another network policy needs to be applied to allow these ports
+    otlpNamespace: ""
+    # @param global.networkPolicy.otlpPodLabelMatch pod labels (as a "key: value" string) of the OTLP receiver to allow egress to, e.g. "app.kubernetes.io/name: tempo"
+    # If empty, egress on the OTLP ports is allowed to ALL pods in otlpNamespace
+    otlpPodLabelMatch: "app.kubernetes.io/name: tempo"
 
 ## RevisionHistory
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3

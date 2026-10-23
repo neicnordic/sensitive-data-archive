@@ -1,0 +1,3 @@
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- include "sda.serviceMonitor" (dict "root" . "app" "finalize") }}
+{{- end }}
