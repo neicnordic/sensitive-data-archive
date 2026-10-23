@@ -592,3 +592,4 @@ jobs:
       - name: Fail if a needed job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
+# selection test
