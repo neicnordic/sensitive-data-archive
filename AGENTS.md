@@ -21,7 +21,7 @@ This file is for AI coding agents (Claude Code reads it through `CLAUDE.md`; Cod
   The root `.golangci.yml` is a golangci-lint v2 configuration, so v1 does not work.
 * Integration tests (`make integrationtest-*`) run Docker Compose stacks and are slow.
   Not every target builds its images first: run `make build-all` before `make integrationtest-sda-download-v2`.
-  CI runs them on PRs that touch the paths listed in `.github/workflows/pr_build_and_test_images.yml`.
+  CI runs each one on PRs and in the merge queue when a path it depends on changes (the `changes` job in `.github/workflows/pr_build_and_test_images.yml`), and runs all of them nightly on `main`.
 * Markdown under `docs/decisions/` and `docs/rfcs/` is linted with markdownlint-cli2 using `.markdownlint.yml`.
 
 ## Conventions

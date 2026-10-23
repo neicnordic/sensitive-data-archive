@@ -1,23 +1,106 @@
 name: "PR "
 on:
   pull_request:
-    paths:
-      - "charts/**" # We want to run integration tests if charts are changed, given the chart integration tests
-      - "sda/**"
-      - "sda-download/**"
-      - "sda-validator/orchestrator/**"
-      - "sda-doa/**"
-      - "sda-sftp-inbox/**"
-      - "postgresql/**"
-      - "rabbitmq/**"
-      - ".github/integration/**" # the integration tests themselves
-      - ".github/workflows/pr_build_and_test_images.yml"
+  merge_group:
+  schedule:
+    - cron: "0 2 * * *" # Every stack, every night, on main
 env:
-  PR_NUMBER: ${{ github.event.number }} # Needed by the triggered integration tests to pull image for this PR
+  # Image tag for the triggered integration tests; queue and nightly runs have no PR number
+  PR_NUMBER: ${{ github.event.number || format('mq{0}', github.run_id) }}
 
 jobs:
+  # One flag per test job; the test jobs run only when a file they depend on changed.
+  # The nightly run sets every flag.
+  changes:
+    name: Select tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      any: ${{ github.event_name == 'schedule' || steps.filter.outputs.changes != '[]' }}
+      postgres: ${{ github.event_name == 'schedule' || steps.filter.outputs.postgres == 'true' }}
+      federation: ${{ github.event_name == 'schedule' || steps.filter.outputs.federation == 'true' }}
+      sda: ${{ github.event_name == 'schedule' || steps.filter.outputs.sda == 'true' }}
+      sync: ${{ github.event_name == 'schedule' || steps.filter.outputs.sync == 'true' }}
+      validator: ${{ github.event_name == 'schedule' || steps.filter.outputs.validator == 'true' }}
+      download: ${{ github.event_name == 'schedule' || steps.filter.outputs.download == 'true' }}
+      download-v2: ${{ github.event_name == 'schedule' || steps.filter.outputs.download-v2 == 'true' }}
+      doa: ${{ github.event_name == 'schedule' || steps.filter.outputs.doa == 'true' }}
+      sftp-inbox: ${{ github.event_name == 'schedule' || steps.filter.outputs.sftp-inbox == 'true' }}
+      charts: ${{ github.event_name == 'schedule' || steps.filter.outputs.charts == 'true' }}
+    steps:
+      - name: Check out code
+        if: github.event_name != 'schedule'
+        uses: actions/checkout@v7
+
+      - uses: dorny/paths-filter@v4
+        if: github.event_name != 'schedule'
+        id: filter
+        with:
+          token: "" # git diff instead of the PR files API, which stops at 3000 files
+          predicate-quantifier: some-with-excludes
+          filters: |
+            all: &all
+              - ".github/integration/**"
+              - ".github/workflows/pr_build_and_test_images.yml"
+              - "!**/*.md"
+            postgres:
+              - *all
+              - "postgresql/**"
+            federation:
+              - *all
+              - "sda/**"
+              - "rabbitmq/**"
+            sda:
+              - *all
+              - "sda/**"
+              - "postgresql/**"
+              - "rabbitmq/**"
+              - "sda-sftp-inbox/**"
+            sync:
+              - *all
+              - "sda/**"
+              - "postgresql/**"
+              - "rabbitmq/**"
+            validator:
+              - *all
+              - "sda/**"
+              - "postgresql/**"
+              - "rabbitmq/**"
+              - "sda-validator/orchestrator/**"
+            download:
+              - *all
+              - "sda/**"
+              - "postgresql/**"
+              - "sda-download/**"
+              - "Makefile"
+            download-v2:
+              - *all
+              - "sda/**"
+              - "postgresql/**"
+            doa:
+              - *all
+              - "postgresql/**"
+              - "rabbitmq/**"
+              - "sda-doa/**"
+            sftp-inbox:
+              - *all
+              - "sda-sftp-inbox/**"
+            charts:
+              - *all
+              - "charts/**"
+              - "Makefile" # k3d.sh creates the cluster with make
+              - "sda/**"
+              - "postgresql/**"
+              - "rabbitmq/**"
+              - "sda-download/**"
+              - "sda-sftp-inbox/**"
+
   build_images:
     name: Build ${{ matrix.name }} Docker Image
+    needs:
+      - changes
+    if: needs.changes.outputs.any == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -72,7 +155,7 @@ jobs:
           context: ./${{ matrix.path }}
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+            ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}
           labels: | # As this is a PR we set the version by the git sha
             org.opencontainers.image.title=${{ github.repository }}
             org.opencontainers.image.description=Sensitive Data Archive - ${{ matrix.name }}
@@ -83,12 +166,13 @@ jobs:
             org.opencontainers.image.version=${{ github.sha }}
 
       - name: Run Trivy vulnerability scanner on ${{ matrix.name }} sarif
+        if: github.event_name == 'pull_request'
         uses: aquasecurity/trivy-action@v0.36.0
         env: # As we have the Update Trivy Cache cronjob which updates the cache daily we do not it per scan
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
-          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}
           format: "sarif"
           hide-progress: true
           ignore-unfixed: true
@@ -97,18 +181,21 @@ jobs:
 
       # We do this step such that the report in the Github code scanning is more clear for which image a vulnerability originates from
       - name: Append image info to sarif file
+        if: github.event_name == 'pull_request'
         run: |
-          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}/" + .' \
+          jq '.runs[].results[].locations[].physicalLocation.artifactLocation.uri |= "ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}/" + .' \
             results.sarif > annotated_results.sarif 
 
       - name: Upload Trivy scan results to GitHub Security tab
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: annotated_results.sarif
-          category: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          category: ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}
 
       # Only run trivy scan with markdown output and add PR comment if PR changes the relevant file
       - uses: dorny/paths-filter@v4
+        if: github.event_name == 'pull_request'
         id: changes
         with:
           filters: |
@@ -122,7 +209,7 @@ jobs:
           TRIVY_SKIP_DB_UPDATE: true
           TRIVY_SKIP_JAVA_DB_UPDATE: true
         with:
-          image-ref: ghcr.io/${{ github.repository }}:PR${{ github.event.number }}${{ matrix.image-tag-suffix }}
+          image-ref: ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}
           format: template
           template: '@.github/trivy_report_template_markdown.tpl'
           output: trivy-results.md
@@ -163,7 +250,9 @@ jobs:
 
   rabbitmq_test_federated:
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.federation == 'true'
     name: Rabbitmq federated tests
     runs-on: ubuntu-latest
     steps:
@@ -175,7 +264,9 @@ jobs:
 
   postgres_test:
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.postgres == 'true'
     name: Postgres tests
     runs-on: ubuntu-latest
     steps:
@@ -188,7 +279,9 @@ jobs:
   sda_integration_test:
     name: sda ${{ matrix.storage }} integration tests
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.sda == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -207,7 +300,9 @@ jobs:
   sda-sync_integration_test:
     name: sda-sync integration tests
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.sync == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
@@ -220,7 +315,9 @@ jobs:
   sda-validator-orchestrator_integration_test:
     name: sda-validator-orchestrator integration tests
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.validator == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -234,7 +331,9 @@ jobs:
 
   sda-download_integration_test: # TODO this test rebuilds the sftp-inbox image, shouldn't be needed
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.download == 'true'
     name: sda-download-integration ${{ matrix.storagetype }} integration tests
     runs-on: ubuntu-latest
     env:
@@ -281,7 +380,9 @@ jobs:
 
   sda-download-v2_integration_test:
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.download-v2 == 'true'
     name: download v2 integration tests
     runs-on: ubuntu-latest
     steps:
@@ -292,7 +393,9 @@ jobs:
   sda-doa_integration_test:
     name: sda-doa ${{ matrix.storage }} integration tests
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.doa == 'true'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -309,6 +412,9 @@ jobs:
         run: docker compose -f .github/integration/sda-doa-${{ matrix.storage }}-outbox.yml run integration_test
 
   sftp-inbox_integration_test: # TODO this tests is rebuilding sftp-inbox image, shouldnt be needed
+    needs:
+      - changes
+    if: needs.changes.outputs.sftp-inbox == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -340,7 +446,9 @@ jobs:
 
   chart_tests:
     needs:
+      - changes
       - build_images
+    if: needs.changes.outputs.charts == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -376,7 +484,7 @@ jobs:
 
       - name: Deploy DB
         id: deployDB
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ github.event.number }} ${{matrix.tls}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-db ${{ env.PR_NUMBER }} ${{matrix.tls}}
       - name: debug
         if: failure() && steps.deployDB.outcome == 'failure'
         run: |
@@ -386,7 +494,7 @@ jobs:
 
       - name: Deploy MQ
         id: deployMQ
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ github.event.number }} ${{matrix.tls}} ${{matrix.deployment}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-mq ${{ env.PR_NUMBER }} ${{matrix.tls}} ${{matrix.deployment}}
         shell: bash
       - name: debug
         if: failure() && steps.deployMQ.outcome == 'failure'
@@ -396,7 +504,7 @@ jobs:
           kubectl logs broker-sda-mq-0
 
       - name: Deploy pipeline
-        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ github.event.number }} ${{matrix.tls}} ${{matrix.storage}} ${{matrix.deployment}}
+        run: bash .github/integration/scripts/charts/deploy_charts.sh sda-svc ${{ env.PR_NUMBER }} ${{matrix.tls}} ${{matrix.storage}} ${{matrix.deployment}}
         shell: bash
 
       - name: Check deployment
@@ -436,3 +544,28 @@ jobs:
             sleep 1
           fi
         shell: bash
+
+  # The single check to require on main: a job skipped by its `if:` reports success,
+  # while a workflow skipped by `paths:` never reports and would block the queue.
+  result:
+    name: PR result
+    if: always()
+    needs:
+      - changes
+      - build_images
+      - check_mirror
+      - rabbitmq_test_federated
+      - postgres_test
+      - sda_integration_test
+      - sda-sync_integration_test
+      - sda-validator-orchestrator_integration_test
+      - sda-download_integration_test
+      - sda-download-v2_integration_test
+      - sda-doa_integration_test
+      - sftp-inbox_integration_test
+      - chart_tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if a needed job failed or was cancelled
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1
