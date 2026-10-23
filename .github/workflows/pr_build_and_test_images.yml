@@ -569,7 +569,26 @@ jobs:
       - sftp-inbox_integration_test
       - chart_tests
     runs-on: ubuntu-latest
+    permissions:
+      issues: write
     steps:
+      # GitHub only notifies whoever last edited the cron line, and the nightly run is what
+      # catches a stack the filter wrongly skipped
+      - name: Open or update an issue when the nightly run fails
+        if: github.event_name == 'schedule' && (contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled'))
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          title="Nightly PR workflow run failed"
+          number=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Failed again: $RUN_URL"
+          else
+            gh issue create --title "$title" --body "The nightly run of the PR workflow failed on main: $RUN_URL"
+          fi
+
       - name: Fail if a needed job failed or was cancelled
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
         run: exit 1
