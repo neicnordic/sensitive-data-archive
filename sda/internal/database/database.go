@@ -198,6 +198,9 @@ type functions interface {
 	// GetSizeAndObjectCountOfLocation Sums the size and count of the files in a location
 	GetSizeAndObjectCountOfLocation(ctx context.Context, location string) (uint64, uint64, error)
 
+	// GetObjectCountOfLocation counts the files in a location used by the inbox, archive or backup backend
+	GetObjectCountOfLocation(ctx context.Context, backend, location string) (uint64, error)
+
 	// SetBackedUp sets the file backup_path and backup_location
 	SetBackedUp(ctx context.Context, location, path, fileID string) error
 }

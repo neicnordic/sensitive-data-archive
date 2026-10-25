@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- api, mapper, ingest and finalize: a storage endpoint that sets neither `max_objects` nor `max_size` no longer runs a size query over all of `sda.files` at startup and on writes (#2695). With only `max_objects` set, the object count of an archive or backup location is now a plain count on its index. Endpoints that set `max_size` still run the full size query. The count assumes that a location is used in only one role, for example that the inbox and the archive never share a bucket.
 - download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
 - s3inbox: Check if the bucket exists before trying to create it.
 - download: a JWT signed with a key that is not in the loaded key set, for example after the issuer rotates its keys, is no longer rejected until a restart. The JWKS is refetched from `jwt.pubkey-url`, at most once per minute and with a 10 s timeout, and verification is retried once.
