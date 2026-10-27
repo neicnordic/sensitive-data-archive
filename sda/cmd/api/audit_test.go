@@ -97,7 +97,7 @@ func TestAuditEventPerRoute(t *testing.T) {
 		{http.MethodPost, "/file/rotatekey/" + fileID, nil, http.StatusOK},
 		{http.MethodGet, "/file/events/" + fileID, nil, http.StatusOK},
 		{http.MethodPost, "/file/events/" + fileID + "/disabled", reasonBody, http.StatusOK},
-		{http.MethodPut, "/file/verify/" + fileID, nil, http.StatusOK},
+		{http.MethodPut, "/file/verify/" + accessionID, nil, http.StatusOK},
 		{http.MethodDelete, "/file/" + userID + "/" + fileID, nil, http.StatusOK},
 		{http.MethodGet, "/datasets", nil, http.StatusOK},
 		{http.MethodGet, "/dataset/" + datasetID, nil, http.StatusOK},
