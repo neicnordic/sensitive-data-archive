@@ -436,17 +436,16 @@ done
 echo "Finalize by using file ID finished successfully"
 
 
-headers="$(mktemp)"
-body="$(mktemp)"
-trap 'rm -f "$headers" "$body"' EXIT
-
-filesInDataset="$(curl -sS -L -H "Authorization: Bearer $token" "http://api:8080/dataset/SYNC-001-12345/files" | jq -r 'length')"
+filesInDataset="$(curl -sS -L -H "Authorization: Bearer $admin_token" "http://api:8080/dataset/SYNC-001-12345/files" | jq -r 'length')"
 if [ "$filesInDataset" -ne 2 ]; then
 	echo "Error when listing SYNC-001-12345 dataset files, expected it to have 2 files, got: $filesInDataset"
 	exit 1
 fi
 
-curl -sS -L -H "Authorization: Bearer $token" -D "$headers" -o "$body" "http://api:8080/dataset/SYNC-001-12345/files?limit=1"
+headers="$(mktemp)"
+body="$(mktemp)"
+trap 'rm -f "$headers" "$body"' EXIT
+curl -sS -L -H "Authorization: Bearer $admin_token" -D "$headers" -o "$body" "http://api:8080/dataset/SYNC-001-12345/files?limit=1"
 
 filesInDataset="$(jq -r 'length' "$body")"
 if [ "$filesInDataset" -ne 1 ]; then
