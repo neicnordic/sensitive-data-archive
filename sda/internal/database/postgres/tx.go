@@ -206,12 +206,8 @@ func (tx *pgTx) GetDecryptedChecksum(ctx context.Context, fileID string) (string
 	return tx.getDecryptedChecksum(ctx, tx.tx, fileID)
 }
 
-func (tx *pgTx) GetDatasetFiles(ctx context.Context, datasetID string) ([]string, error) {
-	return tx.getDatasetFiles(ctx, tx.tx, datasetID)
-}
-
-func (tx *pgTx) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error) {
-	return tx.getDatasetFileIDs(ctx, tx.tx, datasetID)
+func (tx *pgTx) ListDatasetFiles(ctx context.Context, datasetAccessionID string, limit int, cursor string) ([]*database.DatasetFileInfo, string, error) {
+	return tx.listDatasetFiles(ctx, tx.tx, datasetAccessionID, limit, cursor)
 }
 
 func (tx *pgTx) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {

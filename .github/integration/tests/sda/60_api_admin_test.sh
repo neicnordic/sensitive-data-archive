@@ -435,4 +435,28 @@ until [ "$(psql -U postgres -h postgres -d sda -At -c "SELECT event FROM sda.fil
 done
 echo "Finalize by using file ID finished successfully"
 
+
+filesInDataset="$(curl -sS -L -H "Authorization: Bearer $admin_token" "http://api:8080/dataset/SYNC-001-12345/files" | jq -r 'length')"
+if [ "$filesInDataset" -ne 2 ]; then
+	echo "Error when listing SYNC-001-12345 dataset files, expected it to have 2 files, got: $filesInDataset"
+	exit 1
+fi
+
+headers="$(mktemp)"
+body="$(mktemp)"
+trap 'rm -f "$headers" "$body"' EXIT
+curl -sS -L -H "Authorization: Bearer $admin_token" -D "$headers" -o "$body" "http://api:8080/dataset/SYNC-001-12345/files?limit=1"
+
+filesInDataset="$(jq -r 'length' "$body")"
+if [ "$filesInDataset" -ne 1 ]; then
+	echo "Error when listing SYNC-001-12345 dataset files with limit 1, expected it to have 1 file, got: $filesInDataset"
+	exit 1
+fi
+
+if ! grep -qi '^X-Next-Cursor:[[:space:]]*[^[:space:]]' "$headers"; then
+	echo "Error when listing SYNC-001-12345 dataset files with limit 1, expected X-Next-Cursor header to be present and non-empty"
+	cat "$headers"
+	exit 1
+fi
+
 echo "API admin tests completed successfully"

@@ -380,12 +380,8 @@ func (db *pgDb) GetDecryptedChecksum(ctx context.Context, fileID string) (string
 	return db.getDecryptedChecksum(ctx, nil, fileID)
 }
 
-func (db *pgDb) GetDatasetFiles(ctx context.Context, datasetID string) ([]string, error) {
-	return db.getDatasetFiles(ctx, nil, datasetID)
-}
-
-func (db *pgDb) GetDatasetFileIDs(ctx context.Context, datasetID string) ([]string, error) {
-	return db.getDatasetFileIDs(ctx, nil, datasetID)
+func (db *pgDb) ListDatasetFiles(ctx context.Context, datasetAccessionID string, limit int, cursor string) ([]*database.DatasetFileInfo, string, error) {
+	return db.listDatasetFiles(ctx, nil, datasetAccessionID, limit, cursor)
 }
 
 func (db *pgDb) GetDatasetDetails(ctx context.Context, datasetID string) (*database.DatasetDetails, error) {
