@@ -30,6 +30,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	"go.opentelemetry.io/otel/attribute"
 	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
@@ -970,6 +971,53 @@ func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 		NumberOfFiles: datasetDetails.NumberOfFiles,
 	})
 }
+func (api *API) removeFileFromDataset(w http.ResponseWriter, r *http.Request) {
+	datasetID := r.PathValue("datasetid")
+	accessionID := r.PathValue("accessionid")
+
+	ctx, span := observability.StartSpan(r.Context(), "datasetRemoveFile",
+		attribute.String("dataset_id", datasetID),
+		attribute.String("accession_id", accessionID),
+	)
+	defer span.End()
+
+	fileInDataset, err := api.db.CheckIfFileInDataset(ctx, datasetID, accessionID)
+	if err != nil {
+		span.Error("failed to check if file in dataset", err)
+		w.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+	if !fileInDataset {
+		span.Warn("dataset not found, or file not part of dataset")
+		w.WriteHeader(http.StatusNotFound)
+
+		return
+	}
+
+	datasetFileRemoval := schema.DatasetFileRemoval{
+		Type:        "file_removal",
+		DatasetID:   datasetID,
+		AccessionID: accessionID,
+	}
+	marshaledMsg, _ := json.Marshal(&datasetFileRemoval)
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-file-removal.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
+		span.Error("failed to validate dataset mapping message", err)
+		w.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	fileRemovalMessage := broker.Message{Key: datasetID, Headers: nil, Body: marshaledMsg}
+	if err := api.mq.Publish(ctx, "mappings", fileRemovalMessage); err != nil {
+		span.Error("failed to publish mappings message", err)
+		w.WriteHeader(http.StatusInternalServerError)
+
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}
 func (api *API) createDataset(w http.ResponseWriter, r *http.Request) {
 	ctx, span := observability.StartSpan(r.Context(), "createDataset")
 	defer span.End()
@@ -1082,9 +1130,12 @@ func (api *API) releaseDataset(w http.ResponseWriter, r *http.Request) {
 
 		return
 	}
-	if status != "registered" {
-		span.Warn("dataset not registered", slog.String("dataset_id", datasetID), slog.String("status", status))
-		writeJSON(w, http.StatusBadRequest, "dataset not ready for release")
+	if status == "deprecated" || status == "released" {
+		span.Warn("dataset can not be released",
+			slog.String("dataset_id", datasetID),
+			slog.String("status", status),
+		)
+		writeJSON(w, http.StatusBadRequest, "dataset can not be released")
 
 		return
 	}

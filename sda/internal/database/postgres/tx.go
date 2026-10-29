@@ -134,6 +134,9 @@ func (tx *pgTx) GetSyncData(ctx context.Context, accessionID string) (*database.
 	return tx.getSyncData(ctx, tx.tx, accessionID)
 }
 
+func (tx *pgTx) CheckIfFileInDataset(ctx context.Context, datasetID, accessionID string) (bool, error) {
+	return tx.checkIfFileInDataset(ctx, tx.tx, datasetID, accessionID)
+}
 func (tx *pgTx) CheckIfDatasetExists(ctx context.Context, datasetID string) (bool, error) {
 	return tx.checkIfDatasetExists(ctx, tx.tx, datasetID)
 }
@@ -232,4 +235,8 @@ func (tx *pgTx) SetBackedUp(ctx context.Context, location, path, fileID string) 
 
 func (tx *pgTx) GetFileIDInInbox(ctx context.Context, submissionUser, filePath string) (string, error) {
 	return tx.getFileIDInInbox(ctx, tx.tx, submissionUser, filePath)
+}
+
+func (tx *pgTx) RemoveFileFromDataset(ctx context.Context, datasetID, accessionID string) error {
+	return tx.removeFileFromDataset(ctx, tx.tx, datasetID, accessionID)
 }

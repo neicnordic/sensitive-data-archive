@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -87,8 +88,8 @@ func run() error {
 			slog.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
-	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 25 {
-		return errors.Join(errors.New("database schema v25 is required"), err)
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 28 {
+		return errors.Join(errors.New("database schema v28 is required"), err)
 	}
 
 	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
@@ -160,7 +161,7 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
 	defer span.End()
 
-	schemaType, err := schemaFromDatasetOperation(message.Body)
+	operation, err := datasetOperationFromMessage(message.Body)
 	if err != nil {
 		span.Error("could not derive schema from message", err)
 
@@ -168,7 +169,25 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 		return []func(){app.errorQueue(ctx, message, "could not derive schema from message")}, nil
 	}
 
-	if err := schema.ValidateJSON(fmt.Sprintf("%s/%s.json", app.schemaPath, schemaType), message.Body); err != nil {
+	switch operation {
+	case "mapping":
+		return app.handleMapping(ctx, message)
+	case "release":
+		return app.handleRelease(ctx, message)
+	case "deprecate":
+		return app.handleDeprecate(ctx, message)
+	case "file_removal":
+		return app.handleFileRemoval(ctx, message)
+	default:
+		return []func(){app.errorQueue(ctx, message, "unknown operation type")}, nil
+	}
+}
+
+func (app *mapper) handleMapping(ctx context.Context, message *broker.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "handleMapping")
+	defer span.End()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-mapping.json", app.schemaPath), message.Body); err != nil {
 		span.Error("incoming message validation failed", err)
 
 		// send message to error queue and do not requeue
@@ -182,7 +201,6 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 		// send message to error queue and do not requeue
 		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
 	}
-	span.SetAttributes(attribute.String("dataset-id", mappings.DatasetID), attribute.String("mapping-operation", mappings.Type))
 
 	tx, err := app.db.BeginTransaction(ctx)
 	if err != nil {
@@ -198,100 +216,72 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 
 	var filesToCleanFromInbox []*database.MappingData
 
-	switch mappings.Type {
-	case "mapping":
-		for _, fileAccession := range mappings.AccessionIDs {
-			var fileDownloadPath *string
+	for _, fileAccession := range mappings.AccessionIDs {
+		var fileDownloadPath *string
 
-			if mappings.FileDownloadPaths != nil {
-				if v, ok := mappings.FileDownloadPaths[fileAccession]; ok && v != "" {
-					fileDownloadPath = &v
-				}
+		if mappings.FileDownloadPaths != nil {
+			if v, ok := mappings.FileDownloadPaths[fileAccession]; ok && v != "" {
+				fileDownloadPath = &v
 			}
+		}
 
-			span.Debug("mapping file to dataset",
-				slog.String("dataset-id", mappings.DatasetID),
+		span.Debug("mapping file to dataset",
+			slog.String("dataset-id", mappings.DatasetID),
+			slog.String("file-accession", fileAccession),
+			slog.Bool("overridden-download-path", fileDownloadPath != nil),
+		)
+		fileMappingData, err := tx.GetMappingData(ctx, fileAccession)
+		if err != nil {
+			span.Warn("failed to get mapping data of file",
 				slog.String("file-accession", fileAccession),
-				slog.Bool("overridden-download-path", fileDownloadPath != nil),
+				slog.String("dataset-id", mappings.DatasetID),
+				slog.Any("error", err),
 			)
-			fileMappingData, err := tx.GetMappingData(ctx, fileAccession)
-			if err != nil {
-				span.Warn("failed to get mapping data of file",
-					slog.String("file-accession", fileAccession),
-					slog.String("dataset-id", mappings.DatasetID),
-					slog.Any("error", err),
-				)
 
-				return nil, err
-			}
-
-			if fileMappingData == nil {
-				span.Error("mapping data for file not found",
-					nil,
-					slog.String("file-accession", fileAccession),
-				)
-
-				// send message to error queue and do not requeue
-				return []func(){app.errorQueue(ctx, message, "mapping data for file not found")}, nil
-			}
-			if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID, fileDownloadPath); err != nil {
-				span.Error("failed to map file to dataset-id",
-					err,
-					slog.String("file-accession", fileAccession),
-				)
-
-				if errors.Is(err, database.ErrUniqueViolation) {
-					return []func(){app.errorQueue(ctx, message, "mapping violates unique constraint")}, nil
-				}
-
-				return nil, err
-			}
-
-			if fileMappingData.SubmissionLocation == "" {
-				span.Warn("file does not have a known submission location, can not remove file from inbox",
-					slog.String("file-id", fileMappingData.FileID),
-				)
-
-				continue
-			}
-
-			filesToCleanFromInbox = append(filesToCleanFromInbox, fileMappingData)
+			return nil, err
 		}
 
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(message.Body)); err != nil {
-			span.Error("failed to update dataset status to registered", err)
+		if fileMappingData == nil {
+			span.Error("mapping data for file not found",
+				nil,
+				slog.String("file-accession", fileAccession),
+			)
 
-			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
+			// send message to error queue and do not requeue
+			return []func(){app.errorQueue(ctx, message, "mapping data for file not found")}, nil
+		}
+		if err := tx.MapFileToDataset(ctx, mappings.DatasetID, fileMappingData.FileID, fileDownloadPath); err != nil {
+			span.Error("failed to map file to dataset-id",
+				err,
+				slog.String("file-accession", fileAccession),
+			)
+
+			if errors.Is(err, database.ErrUniqueViolation) {
+				return []func(){app.errorQueue(ctx, message, "mapping violates unique constraint")}, nil
 			}
 
 			return nil, err
 		}
-	case "release":
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "released", string(message.Body)); err != nil {
-			span.Error("failed to update dataset status", err)
 
-			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
-			}
+		if fileMappingData.SubmissionLocation == "" {
+			span.Warn("file does not have a known submission location, can not remove file from inbox",
+				slog.String("file-id", fileMappingData.FileID),
+			)
 
-			return nil, err
+			continue
 		}
-	case "deprecate":
-		if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "deprecated", string(message.Body)); err != nil {
-			span.Error("failed to update dataset status", err)
 
-			if errors.Is(err, database.ErrForeignKeyViolation) {
-				return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
-			}
+		filesToCleanFromInbox = append(filesToCleanFromInbox, fileMappingData)
+	}
 
-			return nil, err
+	if err := tx.UpdateDatasetEvent(ctx, mappings.DatasetID, "registered", string(message.Body)); err != nil {
+		span.Error("failed to update dataset status to registered", err)
+
+		if errors.Is(err, database.ErrForeignKeyViolation) {
+			return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
 		}
-	default:
-		span.Error("unknown mapping operation", nil)
 
-		// send message to error queue and do not requeue
-		return []func(){app.errorQueue(ctx, message, "unknown mapping operation")}, nil
+		return nil, err
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -315,8 +305,154 @@ func (app *mapper) handleMessage(ctx context.Context, message *broker.Message) (
 	return nil, nil
 }
 
+func (app *mapper) handleRelease(ctx context.Context, message *broker.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "handleRelease")
+	defer span.End()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-release.json", app.schemaPath), message.Body); err != nil {
+		span.Error("incoming message validation failed", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "incoming message validation failed")}, nil
+	}
+
+	var datasetRelease schema.DatasetRelease
+	if err := json.Unmarshal(message.Body, &datasetRelease); err != nil {
+		span.Error("failed to unmarshal incoming message", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
+	}
+
+	if err := app.db.UpdateDatasetEvent(ctx, datasetRelease.DatasetID, "released", string(message.Body)); err != nil {
+		span.Error("failed to update dataset status", err)
+
+		if errors.Is(err, database.ErrForeignKeyViolation) {
+			return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
+		}
+
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (app *mapper) handleDeprecate(ctx context.Context, message *broker.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "handleDeprecate")
+	defer span.End()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-deprecate.json", app.schemaPath), message.Body); err != nil {
+		span.Error("incoming message validation failed", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "incoming message validation failed")}, nil
+	}
+
+	var datasetDeprecate schema.DatasetDeprecate
+	if err := json.Unmarshal(message.Body, &datasetDeprecate); err != nil {
+		span.Error("failed to unmarshal incoming message", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
+	}
+
+	if err := app.db.UpdateDatasetEvent(ctx, datasetDeprecate.DatasetID, "deprecated", string(message.Body)); err != nil {
+		span.Error("failed to update dataset status", err)
+
+		if errors.Is(err, database.ErrForeignKeyViolation) {
+			return []func(){app.errorQueue(ctx, message, "mapping violates foreign key constraint")}, nil
+		}
+
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (app *mapper) handleFileRemoval(ctx context.Context, message *broker.Message) ([]func(), error) {
+	ctx, span := observability.StartSpan(ctx, "handleFileRemoval")
+	defer span.End()
+
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-file-removal.json", app.schemaPath), message.Body); err != nil {
+		span.Error("incoming message validation failed", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "incoming message validation failed")}, nil
+	}
+
+	var datasetFileRemoval schema.DatasetFileRemoval
+	if err := json.Unmarshal(message.Body, &datasetFileRemoval); err != nil {
+		span.Error("failed to unmarshal incoming message", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "failed to unmarshal incoming message")}, nil
+	}
+
+	span.SetAttributes(
+		attribute.String("dataset_id", datasetFileRemoval.DatasetID),
+		attribute.String("accession_id", datasetFileRemoval.AccessionID),
+	)
+
+	tx, err := app.db.BeginTransaction(ctx)
+	if err != nil {
+		span.Warn("failed to begin transaction", slog.Any("error", err))
+
+		return nil, err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			span.Error("failed to rollback transaction", err)
+		}
+	}()
+
+	datasetStatus, err := tx.GetDatasetStatus(ctx, datasetFileRemoval.DatasetID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Error("dataset does not exists", err)
+
+			return []func(){app.errorQueue(ctx, message, "dataset does not exists")}, nil
+		}
+		span.Warn("failed to get dataset status", slog.Any("error", err))
+
+		return nil, err
+	}
+
+	if err := tx.RemoveFileFromDataset(ctx, datasetFileRemoval.DatasetID, datasetFileRemoval.AccessionID); err != nil {
+		if !errors.Is(err, database.ErrNoRowsAffected) {
+			span.Warn("failed to remove file from dataset", slog.Any("error", err))
+
+			return nil, err
+		}
+
+		span.Info("file was not associated with dataset")
+
+		return nil, nil
+	}
+
+	targetStatus := "file_removed"
+
+	// if dataset is deprecated allow file removal but do not "undeprecate" dataset
+	if datasetStatus == "deprecated" {
+		targetStatus = datasetStatus
+	}
+
+	if err := tx.UpdateDatasetEvent(ctx, datasetFileRemoval.DatasetID, targetStatus, string(message.Body)); err != nil {
+		span.Warn("failed to log file removal dataset event", slog.Any("error", err))
+
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		span.Error("failed to commit transaction", err)
+		// requeue message as db error is not expected and should succeed on retries
+		return nil, err
+	}
+
+	return nil, nil
+}
+
 // schemaFromDatasetOperation returns the operation done with dataset supplied in body of the message
-func schemaFromDatasetOperation(body []byte) (string, error) {
+func datasetOperationFromMessage(body []byte) (string, error) {
 	message := make(map[string]any)
 	err := json.Unmarshal(body, &message)
 	if err != nil {
@@ -333,16 +469,7 @@ func schemaFromDatasetOperation(body []byte) (string, error) {
 		return "", errors.New("could not cast operation attribute to string")
 	}
 
-	switch datasetOpsType {
-	case "mapping":
-		return "dataset-mapping", nil
-	case "release":
-		return "dataset-release", nil
-	case "deprecate":
-		return "dataset-deprecate", nil
-	default:
-		return "", errors.New("could not recognize mapping operation")
-	}
+	return datasetOpsType, nil
 }
 
 func (app *mapper) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
