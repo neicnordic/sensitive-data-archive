@@ -19,4 +19,8 @@ make k3d-create-cluster
 docker build -t ghcr.io/neicnordic/sensitive-data-archive:oidc -f .github/integration/scripts/charts/Dockerfile .
 # direct mode streams the image into each node; the default tools-node mode goes through a
 # shared tarball that the nodes sometimes cannot see, and k3d reports success regardless
-k3d image import --mode direct ghcr.io/neicnordic/sensitive-data-archive:oidc -c k3s-default
+# the import occasionally hangs forever on a runner, so bound it and retry once
+for i in 1 2; do
+    timeout 300 k3d image import --mode direct ghcr.io/neicnordic/sensitive-data-archive:oidc -c k3s-default && break
+    [ "$i" = 2 ] && exit 1
+done

@@ -23,21 +23,23 @@ func (db *pgDb) getFileStatusHistory(ctx context.Context, tx *sql.Tx, fileID str
 
 	rows, err := stmt.QueryContext(ctx, fileID)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var fileInfo []database.FileStatus
 	for rows.Next() {
 		var f database.FileStatus
 		if err := rows.Scan(&f.Event, &f.User, &f.Details, &f.Message, &f.CreatedAt); err != nil {
-			return nil, err
+			return nil, parsePQError(err)
 		}
 		fileInfo = append(fileInfo, f)
 	}
 
-	if rows.Err() != nil {
-		return nil, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, parsePQError(err)
 	}
 
 	return fileInfo, nil

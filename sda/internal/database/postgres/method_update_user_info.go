@@ -24,7 +24,7 @@ func (db *pgDb) updateUserInfo(ctx context.Context, tx *sql.Tx, userID, name, em
 
 	result, err := stmt.ExecContext(ctx, userID, name, email, pq.Array(groups))
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
 		return errors.New("something went wrong with the query zero rows were changed")

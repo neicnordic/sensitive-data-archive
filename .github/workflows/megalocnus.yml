@@ -1,0 +1,133 @@
+name: Megalocnus
+
+# Posts a refinement plan with clarifying questions on issues (RFC-0006, plan-only pilot).
+# Claude can only read the checkout; the comment is posted by a later step with the App token.
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: read
+
+jobs:
+  # Authorize in its own job, without concurrency, so outsiders cannot replace a queued team run.
+  authorize:
+    if: >-
+      (github.event.action == 'labeled' && github.event.label.name == 'megalocnus') ||
+      (github.event_name == 'issue_comment' && !github.event.issue.pull_request && startsWith(github.event.comment.body, '@megalocnus replan'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Check the request
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACTOR: ${{ github.actor }}
+          BODY: ${{ github.event.comment.body }}
+          HAS_SECRETS: ${{ secrets.ANTHROPIC_API_KEY != '' && secrets.MEGALOCNUS_APP_PRIVATE_KEY != '' }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = issue_comment ] && [ "$(printf '%s\n' "$BODY" | head -n 1 | tr -d '\r' | xargs)" != "@megalocnus replan" ]; then
+            echo "::notice::Skipped: the comment is not the replan command."
+            exit 0
+          fi
+          # The legacy permission field reports maintain as write and triage as read.
+          permission=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$ACTOR/permission" --jq .permission)
+          case "$permission" in
+            admin|write) ;;
+            *) echo "::notice::Skipped: $ACTOR has '$permission' access, and Megalocnus only runs for the team."; exit 0 ;;
+          esac
+          if [ "$HAS_SECRETS" != "true" ]; then
+            echo "::notice::Skipped: ANTHROPIC_API_KEY or MEGALOCNUS_APP_PRIVATE_KEY is not set."
+            exit 0
+          fi
+          echo "run=true" >> "$GITHUB_OUTPUT"
+
+  refine:
+    needs: authorize
+    if: needs.authorize.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    concurrency:
+      group: megalocnus-${{ github.event.issue.number }}
+      cancel-in-progress: false
+    env:
+      MODEL: claude-opus-5-5
+      CLAUDE_CODE_VERSION: 2.1.300
+      NUMBER: ${{ github.event.issue.number }}
+    steps:
+      - name: Fetch the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue view "$NUMBER" --repo "$GITHUB_REPOSITORY" --json title,body,author,labels,comments > "$RUNNER_TEMP/issue.json"
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open --limit 500 --json number,title > "$RUNNER_TEMP/open-issues.json"
+          echo "VERSION=$(( $(jq '[.comments[] | select(.author.login == "megalocnus" and (.body | startswith("<!-- megalocnus-plan -->")))] | length' "$RUNNER_TEMP/issue.json") + 1 ))" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No secret in this step's environment, so package install scripts never see the token.
+      - name: Install Claude Code
+        run: npm install -g --silent "@anthropic-ai/claude-code@$CLAUDE_CODE_VERSION"
+
+      - name: Write the plan
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # --restricted plus --tools leaves only Read, Grep and Glob, confined to the checkout; no shell, no web, no MCP.
+          { cat .github/megalocnus/refine.md
+            echo '<issue>'; cat "$RUNNER_TEMP/issue.json"; echo '</issue>'
+            echo '<open-issues>'; cat "$RUNNER_TEMP/open-issues.json"; echo '</open-issues>'; } |
+            claude -p --restricted --strict-mcp-config --tools "Read,Grep,Glob" --model "$MODEL" \
+              --output-format json --no-session-persistence > "$RUNNER_TEMP/out.json"
+          # Keep the reply from the first heading on, without any marker the model echoed back
+          # or footer it copied from an earlier plan, defuse HTML comments that could hide the
+          # footer, turn @handles into code so nobody is pinged, and stay under GitHub's comment limit.
+          jq -r 'if type == "array" then .[-1] else . end | select(.is_error == false) | .result // empty' "$RUNNER_TEMP/out.json" |
+            grep -vF '<!-- megalocnus-plan -->' | sed 's/<!--/\&lt;!--/g' |
+            awk 'found || /^##?#? /{found=1; print}' | sed '/^🦥/,$d' |
+            sed -E 's/(^|[^A-Za-z0-9_.`])@([A-Za-z0-9][A-Za-z0-9-]*(\/[A-Za-z0-9_.-]+)?)/\1`@\2`/g' |
+            head -c 60000 > "$RUNNER_TEMP/plan.md"
+          test -s "$RUNNER_TEMP/plan.md" || { echo "::error::Claude returned no plan."; exit 1; }
+          # Real API cost of this run, shown in the footer so the pilot can be evaluated per issue.
+          jq -r 'if type == "array" then .[-1] else . end |
+            "COST=\((.total_cost_usd // 0) * 100 | round / 100)",
+            "TOKENS_IN=\(.usage | ((.input_tokens // 0) + (.cache_creation_input_tokens // 0) + (.cache_read_input_tokens // 0)) / 1000 | round)",
+            "TOKENS_OUT=\(.usage.output_tokens // 0 | . / 1000 | round)"' "$RUNNER_TEMP/out.json" >> "$GITHUB_ENV"
+          # The plan is posted publicly, so refuse anything that contains the API key.
+          if grep -qF -- "$ANTHROPIC_API_KEY" "$RUNNER_TEMP/plan.md" || grep -q 'sk-ant-' "$RUNNER_TEMP/plan.md"; then
+            echo "::error::The plan contains a credential and was not posted."
+            exit 1
+          fi
+
+      - uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        id: app-token
+        with:
+          client-id: Iv23linMG5HbMd4ivQww
+          private-key: ${{ secrets.MEGALOCNUS_APP_PRIVATE_KEY }}
+          permission-issues: write
+
+      - name: Post the plan
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # The marker must stay first: it keeps this comment from matching the replan trigger.
+          {
+            echo '<!-- megalocnus-plan -->'
+            echo "## Plan v$VERSION"
+            echo
+            cat "$RUNNER_TEMP/plan.md"
+            echo
+            echo '---'
+            echo "🦥 Written by Megalocnus, Claude (\`$MODEL\`), requested by $ACTOR. It read the code and changed nothing; the team decides what happens next. To get an updated plan, add your answers or updates to the issue description or in a comment, then post a new comment whose first line is \`@megalocnus replan\`. React with 👍 or 👎 so we can evaluate the pilot. Cost: $COST USD (${TOKENS_IN}k tokens in, ${TOKENS_OUT}k out). [Run log]($RUN_URL)"
+          } > "$RUNNER_TEMP/comment.md"
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comment.md"

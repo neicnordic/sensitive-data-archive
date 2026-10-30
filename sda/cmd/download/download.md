@@ -39,7 +39,10 @@ The service uses structure-based detection to classify tokens:
 
 Tokens with three dot-separated base64url segments (valid JSON header and payload)
 are treated as JWTs. They are validated locally against public keys loaded from
-`jwt.pubkey-path` or fetched from `jwt.pubkey-url`. If `oidc.issuer` is configured,
+`jwt.pubkey-path` or fetched from `jwt.pubkey-url`. When a JWT's `kid` is not in
+the loaded key set (e.g. after issuer key rotation), the JWKS is refetched from
+`jwt.pubkey-url`, at most once per minute, and verification is retried once.
+Keys from `jwt.pubkey-path` are always kept. If `oidc.issuer` is configured,
 the JWT `iss` claim must match. JWT validation failures are final — there is no
 userinfo fallback.
 
@@ -153,6 +156,23 @@ the TTL. The TTL is not a revocation window in any wider sense, though: JWTs are
 validated locally against the configured keys, so the service never asks the
 issuer whether a token is still good, and the userinfo lookup behind an opaque
 token has a cache of its own (`visa.cache.userinfo-ttl`).
+
+A grant made after the entry was written is hidden for as long as the entry
+lives. When a REMS approval adds a visa to a user's passport, a user with a
+cached entry keeps getting the old dataset list and the new visa is not fetched
+until the entry expires, which with the default `visa.cache.token-ttl` of
+`3600` is up to an hour. The entry cannot outlive the token, and a stale entry
+never lists more than the user had at login, so nobody gets access they should
+not have. The user just does not see the new dataset yet.
+
+The support answer to "I was granted access but the dataset is not listed" is
+to log in again. The new token misses the token cache and the visas are fetched
+again. This assumes the client stops sending the old `sda_session` cookie: the
+middleware checks the cookie before the bearer token, so a browser that keeps
+it stays on the old list until the cookie's `Max-Age` runs out. A client that
+offers "log in again" should clear the cookie at the same time. Operators who
+want a shorter window can lower `visa.cache.token-ttl`; the visa validation and
+userinfo caches already default to 120 s and 60 s.
 
 `swagger_v2.yml` lists `bearerAuth` as its only security scheme because of the
 per-replica scope. The server does authenticate a request carrying nothing but
@@ -494,8 +514,9 @@ Returns a paginated list of files in the specified dataset.
 - Query Parameters
   - `pageSize` (optional): Number of results per page
   - `pageToken` (optional): Opaque token for the next page
-  - `filePath` (optional): Exact dataset-relative file path. Returns at
-    most one result.
+  - `filePath` (optional): Exact dataset-relative file path. Normally
+    returns at most one result; files that share the path are all returned
+    and paginated.
   - `pathPrefix` (optional): Recursive prefix filter (for example
     `samples/controls/`).
   - `filePath` and `pathPrefix` are mutually exclusive; supplying both
@@ -910,7 +931,13 @@ attributes these keys control.
 | `PAGINATION_HMAC_SECRET`  | `pagination.hmac-secret`| HMAC secret for page tokens (must match across replicas) |   |
 
 If not configured, a random secret is generated at startup. Page tokens will not
-survive restarts or work across replicas without a configured secret.
+survive restarts or work across replicas without a configured secret. Any random
+string works, for example `openssl rand -hex 32`. You can rotate it at any time;
+outstanding page tokens become invalid and nothing else changes.
+
+When deploying with the Helm chart, set `global.downloadV2.pagination.hmacSecret`;
+see the [Secrets](../../../charts/sda-svc/README.md#secrets) section of the chart
+README for how the chart handles secret values.
 
 ### Audit
 
@@ -928,6 +955,10 @@ Production safety guards enforce:
 - `jwt.allow-all-data` must be `false`
 - `pagination.hmac-secret` must be configured
 - `grpc.client-cert` and `grpc.client-key` must be configured
+
+### Observability
+The download service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../pkg/observability/README.md).
 
 ## Testing
 

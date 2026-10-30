@@ -1,0 +1,7 @@
+{{- if eq "isolated" .Values.global.schemaType }}
+{{- if .Values.global.sync.enabled }}
+{{- if or (or (eq "all" .Values.global.deploymentType) (eq "internal" .Values.global.deploymentType) ) (not .Values.global.deploymentType) }}
+{{- include "sda.serviceMonitor" (dict "root" . "app" "sync") }}
+{{- end }}
+{{- end }}
+{{- end }}

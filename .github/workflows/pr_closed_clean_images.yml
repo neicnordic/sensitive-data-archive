@@ -2,8 +2,6 @@ name: clean image registry
 on:
   schedule:
     - cron: '0 8 * * *'  # Run daily at 08:00 UTC
-  pull_request: # We run this in all PRs even if PR didnt build images just to be safe
-    types: [ closed ]
 
 jobs:
   clean_pr_images_from_registry:
@@ -18,25 +16,8 @@ jobs:
         run: |
           gh api -H "Accept: application/vnd.github+json" /orgs/neicnordic/packages/container/sensitive-data-archive/versions --paginate > all_container_versions
 
-      # Get containers built tagged by the PR number if the container does not have a semantic version tag(which should not be possible by the workflow but check is there for safety)
-      - name: Filter container versions from PR
-        if: ${{ github.event.number != '' }}
-        run: |
-          # (use jq to find the container versions which have do not have semantic version tag)
-          PR_TAG_REGEX="^PR${{ github.event.number }}(-[A-Za-z0-9_-]+)?$"
-          cat all_container_versions | jq -r --arg tag "$PR_TAG_REGEX" --arg sem_ver '^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' '
-            .[] |
-            select(.metadata.container.tags != null) |
-            select([.metadata.container.tags[] | test($tag)] | any) |
-            select(
-            [ .metadata.container.tags[] | test($sem_ver) ] | any | not
-            ) |
-            "\(.id) \(.updated_at) \(.metadata.container.tags | join(","))"
-          ' > filtered_containers_versions
-
       # Get containers which has tags but no semantic version tag, which was last updated 30 days ago
       - name: Filter container versions from cronjob, which has tags but no semantic version tags and is older than 30 days
-        if: ${{ github.event.number == '' }}
         run: |
           cat all_container_versions | jq -r --argjson now "$(date +%s)" --arg sem_ver '^v?[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$' '
             .[] |

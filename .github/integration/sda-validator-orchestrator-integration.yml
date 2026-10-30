@@ -16,7 +16,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim-bookworm
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -24,7 +24,7 @@ services:
 
   database_init:
     container_name: database_init
-    image: postgres:15.4-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:postgres-15.4-alpine
     command:
       - "/bin/sh"
       - "-c"
@@ -94,28 +94,17 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data  --console-address ":9001"
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
-    environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   validator-orchestrator_init:
     container_name: validator-orchestrator_init
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     depends_on:
       credentials:
         condition: service_completed_successfully
@@ -171,10 +160,7 @@ services:
 
   validator-orchestrator:
     build:
-      args:
-        GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
-      context: ../../sda
-      target: debug
+      context: ../../sda-validator/orchestrator
     security_opt: # Unconfine seccomp and apparmor to allow apptainer to create usernamespaces within the container
       - seccomp=unconfined
       - apparmor=unconfined
@@ -223,14 +209,13 @@ services:
       args:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
-      target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-s3inbox ]
     container_name: s3inbox
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       mock-aai:
         condition: service_healthy
@@ -241,7 +226,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTING_KEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
     extra_hosts:
@@ -333,7 +318,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -352,7 +337,7 @@ services:
         condition: service_started
     extra_hosts:
       - "localhost:host-gateway"
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     profiles:
       - tests
     volumes:
@@ -360,7 +345,6 @@ services:
       - ./tests/validator-orchestrator:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   rabbitmq_data:
   shared:

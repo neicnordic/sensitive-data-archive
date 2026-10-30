@@ -363,7 +363,7 @@ paths:
           description: Internal server error.
   /file/{userName}/{fileID}:
     delete:
-      description: Delete a file from the inbox
+      description: Delete a file from the inbox and mark it as `removed`.
       parameters:
       - in: path
         name: fileID

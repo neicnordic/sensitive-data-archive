@@ -8,12 +8,85 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
-- api: add new API /dataset/{dataset_id} for getting state of a dataset
-- api: add new endpoint /file/cancel for cancelling an ingested file.
+- Add observability package which adds support for tracing and metrics collecting and exporting with OpenTelemetry
+  - See [Observability README.md](pkg/observability/README.md) for additional information
+  - Add OpenTelemetry instrumentation for the PostgreSQL database connection
+  - Add support for injecting/extracting trace headers on the broker rabbitmq to support distributed tracing
+  - Add tracing in the storage reader/writer libraries for s3 and posix
+- Initialize observability package and otel middleware for http/grpc client and servers, and add span creating in the following
+  - api, auth, download, finalize, ingest, mapper, reencrypt, rotatekey, s3inbox, sync, and verify
 
 ### Changed
 
+- api: `/files` and `/users/{username}/files` now list files with `fileStatus` `disabled`.
+- api: files deleted with `DELETE /file/{username}/{fileID}` are logged as `removed` instead of `disabled`.
+- auth: replace the unmaintained Iris web framework with `net/http`, which unblocks the move to Go 1.27. Routes, templates and configuration are unchanged. The `_session_id` cookie is now only set when there is a message or s3cmd config to carry to the next request, it expires after 10 minutes instead of never, and it is marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https; previously every request, including probes, started a session that was kept in memory for the lifetime of the pod. CORS preflight requests are now answered when `cors.origins` is set, a request with the wrong method, including `HEAD`, gets `405` instead of `404`, a path with a trailing slash such as `/oidc/` gets `404` instead of a redirect, and the HTTPS server now has the same timeouts as the HTTP one, with a 30 second write timeout for both.
+- auth: the `state` cookie is only marked `Secure` when sda-auth serves TLS or `oidc.redirectUrl` is https, so the OIDC login works over plain HTTP (#1101).
+- postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
+
+### Fixed
+
+- api: successful admin calls had no audit trail from v3.1.75 through v4.0.3; only failed authentication and denied requests were logged. Every request behind authentication now writes one `"type":"audit"` JSON event to stdout with the user, method, path, status and trace id, independent of the log level, in the same schema as the download service. Log filters that match the old `"audit": true` field must be updated. The `api.audit` option is gone, audit logging in the api cannot be turned off, and the request log line now reports the real `status_code` instead of always 200 (#2687, #2656). The audit logger shared by api and download also no longer stops writing for good after one failed write to stdout; a failed write is reported in the application log instead.
+- download: listing a dataset's files with `filePath` now pages correctly when several files share that path. Previously every page returned the same files and a new `nextPageToken`, so a client following the tokens never finished. All matching files are now returned once, ordered by file ID, and the API docs no longer promise at most one result.
+- s3inbox: Check if the bucket exists before trying to create it.
+- download: a JWT signed with a key that is not in the loaded key set, for example after the issuer rotates its keys, is no longer rejected until a restart. The JWKS is refetched from `jwt.pubkey-url`, at most once per minute and with a 10 s timeout, and verification is retried once.
+
+## [4.0.3] - 2026-10-09
+
+### Fixed
+
+- api: `GET /users/{username}/files` is much faster on large `files` tables; the `path_prefix` filter and the pagination cursor are now served by indexes instead of scanning every file of the user, or the whole table (on a 4.7M-row table, listing a folder of about 8,000 files went from 149 s to under 1 s)
+- api: a `path_prefix` containing non-ASCII characters (for example `å`, `ä`, `ö`) now matches files; it used to match nothing
+
+### Changed
+
+- [Added two indexes on `files` and bumped the schema version to 27](../postgresql/migratedb.d/27_add_indexes_on_files_for_user_file_listing.sql): `(submission_user, submission_file_path COLLATE "C")` and `(submission_user, id)`
+  - building them blocks writes to `files` (not reads); on a large table, create them beforehand with `CREATE INDEX CONCURRENTLY` under the same names, and the migration skips them
+  - the api still runs against schema 23 and later; without the indexes it is just slower
+
+## [4.0.2] - 2026-09-30
+
+### Fixed
+
+- bump crypt4gh to v1.15.2, which returns an error instead of panicking or over-allocating on a malformed header packet or a truncated data segment, and recover from crypt4gh panics in every service that parses user data, so a crafted or truncated file can no longer crash, crash-loop or OOM a service:
+  - verify: a truncated file or malformed header now fails to the error queue instead of crashing the service
+  - validator: a truncated file no longer crashes the orchestrator job preparation worker
+  - ingest: a malformed header fails to the error queue; header buffering is bounded so a crafted length cannot exhaust memory
+  - reencrypt: a malformed header is rejected and a panic in a gRPC handler no longer crashes the service
+  - sync: a malformed stored header no longer crashes the service when reencrypting
+  - api: header buffering of an inbox file is bounded
+
+### Changed
+
+- verify: an `error` file event is now written for every failed decrypting copy (for example a storage read error mid-stream), not only for a recovered panic, so the file no longer stays `archived` in `file_event_log` after being routed to the error queue
+
+## [4.0.1] - 2026-09-24
+
+### Fixed
+
+- ingest, finalize: Large files no longer exceed `idle_in_transaction_session_timeout` and loop re-streaming; no storage I/O happens while a database transaction is open
+  - ingest: register a file that is not known in the db (but present in the inbox) as "uploaded" in its own transaction before streaming, so a requeued message is retried
+  - ingest: read the archived file size and write the "submitted" file event after the archive write
+  - finalize: commit the backup in its own transaction before setting the accession ID
+  - finalize: re-check the file status under the row lock so a cancel during the backup copy is not overwritten by "backed up" or "ready"
+  - both: remove the freshly written archive/backup object when the database work fails before the commit is attempted
+
+## [4.0.0] - 2026-09-21
+
+### Added
+
+- s3inbox: Allow forwarding of the [HeadObject action](https://docs.aws.amazon.com/AmazonS3/latest/API/API_HeadObject.html)
+- api: add new API /dataset/{dataset_id} for getting state of a dataset
+- api: add new endpoint /file/cancel for cancelling an ingested file.
+- auth: `OIDC_ACRVALUES` for requiring an authentication context at OIDC login, e.g. two factor authentication.
+
+### Changed
+
+- finalize:
+  - Migrate to Broker V2 package
+  - Multiple completion messages may be published if finalize messages are consumed when file is already in ready
+    - This is to address possible scenario where publish fails after commit during the setting of accession
+  - Use db transactions to ensure correct state even if an error occurs.
 - ingest:
   - Use db transactions during cancel and ingest actions and rollback if encounter error.
   - Requeue messages which could be expected to succeed on a retry.
@@ -23,9 +96,53 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Use log/slog for logging instead of logrus.
   - Wait for the handler that is running to finish on shutdown before closing the broker; a second signal skips the wait.
 - Update remaining mocks to implement github.com/stretchr/testify/mock.Mock.
+- database: add ErrUniqueViolation, ErrNotNullViolation, ErrForeignKeyViolation errors,
+  - Add pq error code parsing for these in the Postgres implementation
+- mapper: 
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+- verify:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+- rotatekey:
+  - Update to use broker/v2 instead of broker (v1)
+  - Update unit tests to use mocks instead of docker 
+  - Use transaction for write actions during message handling incase error for rollback
+  - Remove dependency on config(v1) package, add required rotatekey related configuration to be registrated to config/v2
+    - Changed
+      - C4GH_ROTATEPUBKEYPATH -> TARGET_PUBLIC_KEY
+      - GRPC_HOST + GRPC_PORT -> REENCRYPT_TARGET
+      - GRPC_CACERT -> REENCRYPT_CA_CERT
+      - GRPC_CLIENTCERT -> REENCRYPT_CLIENT_CERT
+      - GRPC_CLIENTKEY -> REENCRYPT_CLIENT_KEY
+      - GRPC_TIMEOUT -> REENCRYPT_TIMEOUT, also now a time.Duration instead of integer of seconds
+      - BROKER_QUEUE -> SOURCE_QUEUE
+      - BROKER_ROUTINGKEY -> ROUTING_KEY
+      - BROKER_PREFETCHCOUNT -> BROKER_PREFETCH_COUNT
+- intercept:
+  - Update to use broker/v2 instead of broker (v1)
+  - Refactor and add unit tests
+  - Add configuration options for destination routing keys
+- s3inbox:
+  - Update to use broker/v2 instead of broker (v1)
+  - Fix reuploads to publish the "remove" message before the "upload" messages, instead of after 
+  - Update unit test to use mocks instead of docker containers
+  - Add additional checks in detectS3RequestType, to reject additional s3 action not previously rejected but not supported
+  - Remove dependency on config (v1) by moving required configuration registration to s3inbox/config
+    - Env variable changes:
+      - SERVER_JWTPUBKEYPATH -> SERVER_JWT_PUB_KEY_PATH
+      - SERVER_JWTPUBKEYURL -> SERVER_JWT_PUB_KEY_URL
+      - BROKER_ROUTING_KEY -> ROUTING_KEY
+      - S3INBOX_CACERT -> S3INBOX_CA_CERT
+- sync:
+  - Update to use broker/v2 instead of broker (v1)
+  - Add unit tests
+  - Allow the remote configuration to be optional, and don't send http notifications if it is not configured
+  - Do not hardcode the `/dataset` path when doing the http calls to the configured remote, instead rely on it being configured in the remote.url
 
 ### Fixed
 
+- auth: report what the login provider refused. An OAuth 2 error redirect to `/oidc/login` carries an `error` instead of a `code`; the empty code was exchanged anyway and the user was told to clear their session cookies.
 - Fixed downloading files by the `file_dataset.download_path` in the sda-download(v1) 
 - broker/v2:
   - A handler that is already running when shutdown starts now gets `broker.shutdown_grace` (a duration, default `20s`) to finish and ack its message, instead of failing its publish with `context canceled`.
@@ -40,6 +157,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `Close()` closes the connection with a deadline instead of closing each channel and waiting for the server's reply without one, so shutdown against a frozen server ends after a few seconds instead of the heartbeat timeout; a connection the server had already dropped is no longer reported as an error.
 - s3 writer: don't panic or upload to an empty bucket name when every endpoint is full
 - api: fix publishing to correct destination on POST /dataset/release/{datasetid}
+- Populate slog log level from LOG_LEVEL configuration
 
 ## [3.1.76] - 2026-07-15
 
@@ -96,4 +214,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed Unhandled error linter issues in sda/download
 
 ## [3.1.71] - 2026-05-25
+
 - Started keeping a changelog after this version.

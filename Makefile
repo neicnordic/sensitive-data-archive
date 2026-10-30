@@ -175,7 +175,7 @@ integrationtest-sda-download-v2-down:
 	@PR_NUMBER=$$(date +%F) docker compose -f .github/integration/sda-download-v2-integration.yml down -v --remove-orphans
 
 # Lightweight dev stack for download API v2 (webapp development)
-dev-download-v2-up: build-all
+dev-download-v2-up: build-postgresql build-sda
 	@PR_NUMBER=$$(date +%F) docker compose -f dev-tools/download-v2-dev/compose.yml up -d
 	@echo ""
 	@echo "Download API v2 ready at http://localhost:8085"

@@ -33,7 +33,7 @@ func (db *pgDb) getSizeAndObjectCountOfLocation(ctx context.Context, tx *sql.Tx,
 			return 0, 0, nil
 		}
 
-		return 0, 0, err
+		return 0, 0, parsePQError(err)
 	}
 
 	return size.V, count.V, nil

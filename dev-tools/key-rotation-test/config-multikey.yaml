@@ -20,6 +20,7 @@ server:
   cert: ""
   key: ""
   jwtpubkeyurl: "http://mockauth:8000/jwks"
+  jwt_pub_key_url: "http://mockauth:8000/jwks"
 
 storage:
   backend: "archive"
@@ -66,7 +67,9 @@ s3inbox:
   secret_key: "secretKey"
   bucket: "inbox"
   region: "us-east-1"
-  ready_path: "/minio/health/ready"
+
+reencrypt:
+  target: "reencrypt:50051"
 
 grpc:
   host: "reencrypt"
@@ -80,7 +83,6 @@ broker:
   password: ""
   vhost: "/sda"
   exchange: "sda"
-  routingKey: ""
   ssl: "false"
 
 database:
@@ -100,12 +102,15 @@ db:
 schema:
   type: "isolated"
 
+schema_type: "isolated"
+
 # --- MULTI-KEY CONFIGURATION FOR CASE 6 ---
+target_public_key: /shared/rotatekey.pub.pem
+
 c4gh:
   filePath: /shared/rotatekey.sec.pem
   passphrase: "rotatekeyPass"
   syncPubKeyPath: /shared/sync.pub.pem
-  rotatePubKeyPath: /shared/rotatekey.pub.pem
 
   privateKeys:
     - filePath: /shared/c4gh.sec.pem

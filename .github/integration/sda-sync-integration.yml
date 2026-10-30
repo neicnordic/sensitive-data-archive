@@ -11,7 +11,7 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
@@ -56,38 +56,26 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data  --console-address ":9001"
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
-    environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   s3inbox:
     build:
       args:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
-      target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [ sda-s3inbox ]
     container_name: s3inbox
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       mock-aai:
         condition: service_healthy
@@ -98,7 +86,7 @@ services:
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTING_KEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
     extra_hosts:
@@ -118,7 +106,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -143,7 +131,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -168,7 +156,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -177,8 +165,8 @@ services:
     environment:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
-      - BROKER_QUEUE=accession
-      - BROKER_ROUTINGKEY=completed
+      - SOURCE_QUEUE=accession
+      - ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
     restart: always
@@ -193,7 +181,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -217,7 +205,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -226,7 +214,7 @@ services:
     environment:
       - BROKER_PASSWORD=sync
       - BROKER_USER=sync
-      - BROKER_QUEUE=mapping_stream
+      - SOURCE_QUEUE=mapping_stream
       - DATABASE_PASSWORD=sync
       - DATABASE_USER=sync
     restart: always
@@ -286,7 +274,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -363,7 +351,7 @@ services:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
       - SYNCTEST=true
-    image: python:3.13-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     profiles:
       - tests
     volumes:
@@ -371,7 +359,6 @@ services:
       - ./tests:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   rabbitmq_data:
   shared:

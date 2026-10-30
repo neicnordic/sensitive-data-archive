@@ -29,7 +29,7 @@ func (db *pgDb) getFileIDByUserPathAndStatus(ctx context.Context, tx *sql.Tx, su
 	var fileID string
 
 	if err := stmt.QueryRowContext(ctx, submissionUser, filePath, status).Scan(&fileID); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return fileID, nil

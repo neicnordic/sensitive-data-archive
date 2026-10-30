@@ -30,7 +30,7 @@ func (db *pgDb) getDatasetFiles(ctx context.Context, tx *sql.Tx, datasetID strin
 	var accessions []string
 	rows, err := stmt.QueryContext(ctx, datasetID)
 	if err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 	defer func() {
 		_ = rows.Close()
@@ -40,14 +40,14 @@ func (db *pgDb) getDatasetFiles(ctx context.Context, tx *sql.Tx, datasetID strin
 		var accessionID string
 		err := rows.Scan(&accessionID)
 		if err != nil {
-			return nil, err
+			return nil, parsePQError(err)
 		}
 
 		accessions = append(accessions, accessionID)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	return accessions, nil

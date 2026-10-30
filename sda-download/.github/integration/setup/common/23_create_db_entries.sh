@@ -12,7 +12,7 @@ dataset_id=$(docker run --rm --name client --network dev_utils_default \
     -e PGSSLCERT=/certs/client.pem \
     -e PGSSLKEY=/certs/client-key.pem \
     -e PGSSLROOTCERT=/certs/ca.pem \
-    neicnordic/pg-client:latest \
+    ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
     postgresql://postgres:rootpassword@db:5432/sda \
     -t -q -c "INSERT INTO sda.datasets (stable_id) VALUES ('https://doi.example/ty009.sfrrss/600.45asasga') \
         ON CONFLICT (stable_id) DO UPDATE \
@@ -25,7 +25,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-      neicnordic/pg-client:latest \
+      ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.files (id, stable_id, submission_user, \
           submission_file_path, submission_file_size, archive_file_path, \
@@ -41,7 +41,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-      neicnordic/pg-client:latest \
+      ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.file_event_log (file_id, event) \
           VALUES ('$file_id', 'ready');"
@@ -51,7 +51,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-  	neicnordic/pg-client:latest \
+  	ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.checksums (file_id, checksum, type, source) \
           VALUES ('$file_id', '06bb0a514b26497b4b41b30c547ad51d059d57fb7523eb3763cfc82fdb4d8fb7', 'SHA256', 'UNENCRYPTED');"
@@ -62,7 +62,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-  	neicnordic/pg-client:latest \
+  	ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.checksums (file_id, checksum, type, source) \
           VALUES ('$file_id', '5e9c767958cc3f6e8d16512b8b8dcab855ad1e04e05798b86f50ef600e137578', 'SHA256', 'UPLOADED');"
@@ -72,7 +72,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-  	neicnordic/pg-client:latest \
+  	ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.checksums (file_id, checksum, type, source) \
           VALUES ('$file_id', '74820dbcf9d30f8ccd1ea59c17d5ec8a714aabc065ae04e46ad82fcf300a731e', 'SHA256', 'ARCHIVED');"
@@ -85,7 +85,7 @@ for file_id in 00000000-0000-0000-0000-000000000001 00000000-0000-0000-0000-0000
       -e PGSSLCERT=/certs/client.pem \
       -e PGSSLKEY=/certs/client-key.pem \
       -e PGSSLROOTCERT=/certs/ca.pem \
-      neicnordic/pg-client:latest \
+      ghcr.io/neicnordic/sda-ci-mirror:neicnordic-pg-client-sha-52f4bc3ba309 \
       postgresql://postgres:rootpassword@db:5432/sda \
       -t -q -c "INSERT INTO sda.file_dataset (file_id, dataset_id) \
           VALUES ('$file_id', $dataset_id);"

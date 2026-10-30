@@ -21,7 +21,7 @@ func (db *pgDb) getAccessionID(ctx context.Context, tx *sql.Tx, fileID string) (
 
 	var aID string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&aID); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return aID, nil

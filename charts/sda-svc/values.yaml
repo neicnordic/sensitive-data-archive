@@ -14,6 +14,37 @@ global:
   tlsPath: "tls"
   jwtPath: "jwt"
 
+
+  observability:
+    # If trace exporting is desired, suggested method is OTEL_TRACES_EXPORTER: "otlp"
+    # Then OTEL_EXPORTER_OTLP_ENDPOINT should also most likely be configured which the applications export the otlp trace information, must be an OTLP/HTTP receiver, commonly port hosted on 4318, for example http://tempo.grafana:4318.
+    # See https://opentelemetry.io/docs/specs/otel/protocol/exporter/ for additional OTLP Exporter configurations.
+    # OTEL_TRACES_EXPORTER: "otlp"
+    # OTEL_EXPORTER_OTLP_ENDPOINT: http://tempo.grafana:4318
+    #
+    # If metrics exporting is desired, suggested method is OTEL_METRICS_EXPORTER: "prometheus"
+    # OTEL_METRICS_EXPORTER: "prometheus"
+    # With the "prometheus" exporter the applications which support observability will host a Prometheus endpoint (/metrics) on
+    # host: "0.0.0.0" (configurable by OTEL_EXPORTER_PROMETHEUS_HOST), and port: 9464 (configurable by OTEL_EXPORTER_PROMETHEUS_PORT)
+    # Set additional OpenTelemetry environment variables under this scope as desired, these will be propagated to the applications.
+    # See https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables
+    env: {}
+    serviceMonitor:
+      ## If true, a ServiceMonitor CR is created for a prometheus operator for all sda applications configured to be deployed
+      ## https://github.com/coreos/prometheus-operator
+      ##
+      enabled: false
+      # Note, the following labels are reserved by the helm chart, and should not be overridden
+      # "app", "chart"
+      labels: {}
+      annotations: {}
+      # Set these to override the Prometheus global scrape interval/timeout.
+      interval: ""
+      scrapeTimeout: ""
+      scheme: http
+      targetLabels: []
+      tlsConfig: {}
+
 # Name of an injected config file, located in the secretsPath
 # If the file is located in a subpath it can be set using the confFilePath
 # If no conf file is specified DB and MQ connections will be configured via ENVs
@@ -78,6 +109,17 @@ global:
     internalNamespace: ""
     ingressNamespace: ""
     ingressLabelMatch: ""
+    # @param global.networkPolicy.prometheusNamespace the namespace to allow prometheus scraping from, required if network policy creation and prometheus exporting enabled
+    prometheusNamespace: ""
+    # @param global.networkPolicy.prometheusPodLabelMatch pod labels (as a "key: value" string) of the prometheus scraper to allow ingress to, e.g. "app.kubernetes.io/name: prometheus"
+    # If empty, ingress on the prometheus ports is allowed to ALL pods in prometheusNamespace
+    prometheusPodLabelMatch: "app.kubernetes.io/name: prometheus"
+    # @param global.networkPolicy.otlpNamespace the namespace to allow otlp egress to, required if network policy creation and otlp tracing exporting enabled
+    # Note, the created network policy only allows the default OTLP ports: 4317, and 4318, if other custom ports are used, another network policy needs to be applied to allow these ports
+    otlpNamespace: ""
+    # @param global.networkPolicy.otlpPodLabelMatch pod labels (as a "key: value" string) of the OTLP receiver to allow egress to, e.g. "app.kubernetes.io/name: tempo"
+    # If empty, egress on the OTLP ports is allowed to ALL pods in otlpNamespace
+    otlpPodLabelMatch: "app.kubernetes.io/name: tempo"
 
 ## RevisionHistory
 ##  If defined, set the revisionHistoryLimit of the deployment, defaults to 3
@@ -390,6 +432,8 @@ global:
     jwkPath: "/jwk"
     id: ""
     secret: ""
+    # @param global.oidc.acrValues space separated authentication context class references, one of which the login must have been made with, e.g. "https://refeds.org/profile/mfa" to enforce two factor authentication (optional)
+    acrValues: ""
     # @param global.oidc.jwtSecret name of k8s secret containing JWT public keys for token verification (optional)
     jwtSecret: ""
 
@@ -435,13 +479,17 @@ global:
   reencrypt:
     host: ""
     port: 50051
+    # @param global.reencrypt.timeout The amount of seconds the clients of reencrypt will wait before timing out a call
     timeout: 5
 
   sync:
+    # @param global.sync.enabled If the sync service is to be enabled and deployed
+    enabled: false
     api:
       pass: ""
       user: ""
     brokerQueue: ""
+    # @param global.sync.centerPrefix Only sync datasets which has this prefix in the accession, if not set all datasets will be synced
     centerPrefix: ""
     destination:
       locationBrokerCacheTTL: ""
@@ -473,10 +521,13 @@ global:
       #     nfsServer: ""
       #     nfsPath: ""
     remote:
-      host: ""
-      port: ""
-      password: ""
+      # @param global.sync.remote.url The URL to an http endpoint which is to get notifications about datasets being synced, if not set no http sync notifications will be sent.
+      # Example: https://synt.to.here:1234/dataset_sync
+      url: ""
+      # @param global.sync.remote.user Username to be used for HTTP basic auth on requests to remote.url, if not set basic auth will not be used when sending http notifications.
       user: ""
+      # @param global.sync.remote.password Password to be used for HTTP basic auth on requests to remote.url, if not set basic auth will not be used when sending http notifications.
+      password: ""
 
 ##################################
 # service specific credentials

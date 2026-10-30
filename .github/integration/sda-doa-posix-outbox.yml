@@ -4,7 +4,7 @@ services:
       - /bin/sh
       - /scripts/make_certs.sh
     container_name: certfixer
-    image: alpine:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:alpine-3.24.2
     volumes:
       - ./scripts:/scripts
       - certs:/certs
@@ -39,7 +39,7 @@ services:
 
   mockauth:
     container_name: mockauth
-    image: python:3.11-slim
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     ports:
       - 8000:8000
     environment:
@@ -125,7 +125,7 @@ services:
 
   integration_test:
     container_name: integration_test
-    image: maven:3.9.16-eclipse-temurin-25
+    image: ghcr.io/neicnordic/sda-ci-mirror:maven:3.9.16-eclipse-temurin-25
     profiles: [test]
     volumes:
       - ../../sda-doa/src:/sda-doa/src

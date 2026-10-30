@@ -7,6 +7,50 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Add observability configuration options
+  - `global.observability` Observability related variable configuration
+    - Propagate `global.observability.env` values as environment variables to the applications, see https://opentelemetry.io/docs/specs/otel/configuration/sdk-environment-variables/ for available environment variables.
+    - Add container and service ports if prometheus metrics exporter configured
+  - Add `.Values.global.networkPolicy.prometheusNamespace` and `.Values.global.networkPolicy.prometheusPodLabelMatch` to configure which namespaces && pods are allowed to call prometheus ports on application if enabled
+  - Add `global.observability.serviceMonitor` configurations to allow enabling prometheus service monitors to be deployed for the applications
+    - Requires the [prometheus operators](https://github.com/prometheus-operator/prometheus-operator) CRDs to exist in the cluster prior to the helm install/upgrade
+    - Requires `.Values.global.observability.env.OTEL_METRICS_EXPORTER` to be configured to "prometheus"
+  - Add `.Values.global.networkPolicy.otlpNamespace`, and `.Values.global.networkPolicy.otlpPodLabelMatch` to configure where applications are allowed to export otlp traces to if network policy creation and otlp trace exporting is enabled
+    - Note, the created network policy only allows the default OTLP ports: 4317, and 4318, if other custom ports are used, another network policy needs to be applied to allow these ports
+
+### Fixed
+- Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
+## [5.0.1] - 2026-09-24
+
+### Fixed
+- Populate backup storage in ingest if backupArchive storage configuration configured
+
+### Changed
+- Bump default sda app version -> v4.0.1
+
+## [5.0.0] - 2026-09-21
+
+### Added
+
+- `global.oidc.acrValues` to require an authentication context at OIDC
+  login, e.g. `https://refeds.org/profile/mfa` to enforce login with a
+  second factor.
+- Add global.sync.enabled to control if the sync service is to be enabled and deployed instead of relying on that global.sync.remote.host is set
+
+### Changed
+
+- Bump default sda app version -> v4.0.0
+- Populate broker_v2 config for finalize
+- Populate broker_v2 config for mapper
+- Populate broker_v2 config for verify
+- Populate broker_v2 config for rotatekey
+- Populate broker_v2 config for intercept
+- Populate broker_v2 config for s3inbox
+- Populate broker_v2 config for sync
+- Update global.sync.remote configuration to specify url instead of host and port, and for remote configuration to be optional
+
 ## [4.0.0] - 2026-08-26
 
 ### Changed

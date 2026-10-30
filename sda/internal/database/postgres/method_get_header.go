@@ -22,7 +22,7 @@ func (db *pgDb) getHeader(ctx context.Context, tx *sql.Tx, fileID string) ([]byt
 
 	var hexString string
 	if err := stmt.QueryRowContext(ctx, fileID).Scan(&hexString); err != nil {
-		return nil, err
+		return nil, parsePQError(err)
 	}
 
 	header, err := hex.DecodeString(hexString)

@@ -72,4 +72,7 @@ if [ "$num_log_rows" -ne 11 ]; then
     exit 1
 fi
 
+## upload a file for a different user
+s3cmd -c s3cfg --access_token "$(cat token)" put NA12878.bam.c4gh s3://testu_lifescience-ri.eu/NB12878_other.bam.c4gh
+
 echo "files uploaded successfully"

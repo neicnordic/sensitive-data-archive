@@ -23,9 +23,9 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	"github.com/lestrrat-go/jwx/v2/jws"
 	"github.com/lestrrat-go/jwx/v2/jwt"
-	"github.com/neicnordic/sensitive-data-archive/cmd/download/audit"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,10 +57,23 @@ type AuthContext struct {
 	AuthSource string
 }
 
+// jwksMinRefreshInterval bounds how often the JWKS is refetched on unknown key IDs.
+const jwksMinRefreshInterval = time.Minute
+
+// jwksFetchTimeout bounds a JWKS fetch, including reading the response body.
+var jwksFetchTimeout = 10 * time.Second
+
 // Authenticator validates JWT tokens.
 type Authenticator struct {
 	Keyset jwk.Set
 	mu     sync.RWMutex
+
+	// jwksURL is the configured JWKS endpoint; empty disables refetching.
+	jwksURL string
+	// staticKeys holds the keys from jwt.pubkey-path, kept across JWKS refetches.
+	staticKeys  jwk.Set
+	refreshMu   sync.Mutex
+	lastRefresh time.Time
 }
 
 // SessionCache holds cached session data using ristretto.
@@ -140,9 +153,13 @@ func InitAuth() error {
 
 	// Load from URL if configured (can be used in addition to or instead of path)
 	if pubKeyURL != "" {
+		auth.staticKeys = auth.Keyset
+		auth.jwksURL = pubKeyURL
 		if err := auth.loadKeysFromURL(pubKeyURL); err != nil {
 			return fmt.Errorf("failed to load JWT keys from URL: %w", err)
 		}
+		// Counts as a refresh, so an unknown kid right after startup does not refetch.
+		auth.lastRefresh = time.Now()
 		log.Infof("JWT keys loaded from URL: %s", pubKeyURL)
 	}
 
@@ -202,19 +219,28 @@ func (a *Authenticator) loadKeysFromPath(keyPath string) error {
 	})
 }
 
-// loadKeysFromURL fetches keys from a JWKS endpoint.
+// loadKeysFromURL fetches keys from a JWKS endpoint and replaces the keyset
+// with the static keys plus the fetched ones. On error the keyset is unchanged.
 func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
 	parsedURL, err := url.ParseRequestURI(jwksURL)
 	if err != nil || parsedURL.Scheme == "" || parsedURL.Host == "" {
 		return fmt.Errorf("invalid JWKS URL: %s", jwksURL)
 	}
 
-	keySet, err := jwk.Fetch(context.Background(), jwksURL)
+	ctx, cancel := context.WithTimeout(context.Background(), jwksFetchTimeout)
+	defer cancel()
+
+	// The fetcher ignores ctx for the HTTP request, so the client timeout is what bounds a stalled response.
+	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(&http.Client{Timeout: jwksFetchTimeout}))
 	if err != nil {
 		return fmt.Errorf("failed to fetch JWKS: %w", err)
+	}
+
+	newSet := jwk.NewSet()
+	if a.staticKeys != nil {
+		if newSet, err = a.staticKeys.Clone(); err != nil {
+			return fmt.Errorf("failed to copy static keys: %w", err)
+		}
 	}
 
 	// Add all keys from the fetched keyset
@@ -230,14 +256,56 @@ func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
 
 			continue
 		}
-		if err := a.Keyset.AddKey(key); err != nil {
+		if err := newSet.AddKey(key); err != nil {
 			log.Warnf("failed to add key: %v", err)
 
 			continue
 		}
 	}
 
+	a.mu.Lock()
+	a.Keyset = newSet
+	a.mu.Unlock()
+
 	return nil
+}
+
+// refreshKeys refetches the JWKS, at most once per jwksMinRefreshInterval.
+// Concurrent callers wait for an in-flight refetch instead of starting another.
+func (a *Authenticator) refreshKeys() {
+	a.refreshMu.Lock()
+	defer a.refreshMu.Unlock()
+
+	if time.Since(a.lastRefresh) < jwksMinRefreshInterval {
+		return
+	}
+	// Set before fetching so a failing endpoint is rate-limited too.
+	a.lastRefresh = time.Now()
+
+	if err := a.loadKeysFromURL(a.jwksURL); err != nil {
+		log.Warnf("JWKS refresh failed, keeping existing keys: %v", err)
+
+		return
+	}
+	log.Infof("JWT keys refreshed from URL: %s", a.jwksURL)
+}
+
+// hasUnknownKey reports whether err means no key matched because the token's
+// kid is not in keys, e.g. after issuer key rotation. A token without kid
+// counts as unknown. Other failures (expiry, bad signature with a known kid)
+// return false.
+func hasUnknownKey(tokenStr string, err error, keys jwk.Set) bool {
+	if !errors.Is(err, errNoKeys) && !jws.IsVerificationError(err) {
+		return false
+	}
+
+	msg, parseErr := jws.Parse([]byte(tokenStr))
+	if parseErr != nil || len(msg.Signatures()) == 0 {
+		return false
+	}
+	_, found := keys.LookupKeyID(msg.Signatures()[0].ProtectedHeaders().KeyID())
+
+	return !found
 }
 
 // looksLikeJWT returns true if token has JWT structure:
@@ -264,18 +332,25 @@ func looksLikeJWT(token string) bool {
 	return true
 }
 
-// verifyJWT validates a JWT token string against the loaded keyset.
-func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
+var errNoKeys = errors.New("no keys configured for token validation")
+
+// keys returns the current keyset. Refreshes replace the set rather than mutate it.
+func (a *Authenticator) keys() jwk.Set {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 
-	if a.Keyset.Len() == 0 {
-		return nil, errors.New("no keys configured for token validation")
+	return a.Keyset
+}
+
+// parseJWT verifies the token signature and standard claims against keys.
+func parseJWT(tokenStr string, keys jwk.Set) (jwt.Token, error) {
+	if keys.Len() == 0 {
+		return nil, errNoKeys
 	}
 
 	token, err := jwt.Parse(
 		[]byte(tokenStr),
-		jwt.WithKeySet(a.Keyset,
+		jwt.WithKeySet(keys,
 			jws.WithInferAlgorithmFromKey(true),
 			jws.WithRequireKid(false),
 		),
@@ -283,6 +358,24 @@ func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
 	)
 	if err != nil {
 		return nil, fmt.Errorf("token validation failed: %w", err)
+	}
+
+	return token, nil
+}
+
+// verifyJWT validates a JWT token string against the loaded keyset.
+// If the token's key is unknown and a JWKS URL is configured, the JWKS is
+// refetched (rate-limited) and verification retried once.
+func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
+	// Judge the failure against the keyset actually used, not one a concurrent refresh swapped in.
+	keys := a.keys()
+	token, err := parseJWT(tokenStr, keys)
+	if err != nil && a.jwksURL != "" && hasUnknownKey(tokenStr, err, keys) {
+		a.refreshKeys()
+		token, err = parseJWT(tokenStr, a.keys())
+	}
+	if err != nil {
+		return nil, err
 	}
 
 	// Validate issuer if configured

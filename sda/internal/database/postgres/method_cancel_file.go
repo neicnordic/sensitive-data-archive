@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"fmt"
 )
 
 const (
@@ -36,15 +35,15 @@ func (db *pgDb) cancelFile(ctx context.Context, tx *sql.Tx, fileID string, messa
 	}
 
 	if _, err := unsetArchivedStmt.ExecContext(ctx, fileID); err != nil {
-		return fmt.Errorf("failed to unset file data (file-id: %s): %w", fileID, err)
+		return parsePQError(err)
 	}
 
 	if _, err := deleteChecksumsStmt.ExecContext(ctx, fileID); err != nil {
-		return fmt.Errorf("failed to delete checksums (file-id: %s): %w", fileID, err)
+		return parsePQError(err)
 	}
 
 	if _, err := logFileEventStmt.ExecContext(ctx, fileID, "disabled", "system", "{\"reason\": \"file cancelled\"}", message); err != nil {
-		return fmt.Errorf("failed to log cancel file event (file-id: %s): %w", fileID, err)
+		return parsePQError(err)
 	}
 
 	return nil

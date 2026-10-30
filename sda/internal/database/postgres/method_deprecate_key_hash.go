@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"errors"
 )
 
 const deprecateKeyHashQuery = "deprecateKeyHash"
@@ -23,11 +22,11 @@ func (db *pgDb) deprecateKeyHash(ctx context.Context, tx *sql.Tx, keyHash string
 
 	result, err := stmt.ExecContext(ctx, keyHash)
 	if err != nil {
-		return err
+		return parsePQError(err)
 	}
 
 	if rowsAffected, _ := result.RowsAffected(); rowsAffected == 0 {
-		return errors.New("key hash not found or already deprecated")
+		return sql.ErrNoRows
 	}
 
 	return nil

@@ -244,7 +244,7 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 			}
 		}
 		if fileResult == nil {
-			if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+			err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
 				ValidationID:      jobMessage.ValidationID,
 				ValidatorID:       jobMessage.ValidatorID,
 				FileID:            fileInfo.FileID,
@@ -253,7 +253,8 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 				FileMessages:      []*model.Message{{Level: "error", Message: "file result not found in validator output", Time: time.Now().Format(time.RFC3339)}},
 				FinishedAt:        now,
 				ValidatorMessages: validatorOutput.Messages,
-			}); err != nil {
+			})
+			if err != nil {
 				log.Errorf("failed to update file validation job on file missing from result file due to: %v", err)
 
 				return err
@@ -262,7 +263,7 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 			continue
 		}
 
-		if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+		err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
 			ValidationID:      jobMessage.ValidationID,
 			ValidatorID:       jobMessage.ValidatorID,
 			FileID:            fileInfo.FileID,
@@ -271,7 +272,8 @@ func updateFileValidationJobs(ctx context.Context, jobMessage *model.JobMessage,
 			FileMessages:      fileResult.Messages,
 			FinishedAt:        now,
 			ValidatorMessages: validatorOutput.Messages,
-		}); err != nil {
+		})
+		if err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
 
 			return err
@@ -323,7 +325,7 @@ func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobM
 	now := time.Now()
 
 	for _, fileInfo := range jobMessage.Files {
-		if err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
+		err := tx.UpdateFileValidationJob(ctx, &model.UpdateFileValidationJobParameters{
 			ValidationID:      jobMessage.ValidationID,
 			ValidatorID:       jobMessage.ValidatorID,
 			FileID:            fileInfo.FileID,
@@ -332,7 +334,8 @@ func updateFileValidationJobsOnError(ctx context.Context, jobMessage *model.JobM
 			FileMessages:      nil,
 			FinishedAt:        now,
 			ValidatorMessages: validatorMessages,
-		}); err != nil {
+		})
+		if err != nil {
 			log.Errorf("failed to update file validation job due to: %v", err)
 
 			return err

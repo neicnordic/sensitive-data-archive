@@ -161,7 +161,7 @@ Admin endpoints are only available to a set of whitelisted users specified in th
 
 - `/file/:username/:fileid`
   - accepts `DELETE` requests
-  - marks the file as `disabled` in the database, and deletes it from the inbox.
+  - marks the file as `removed` in the database, and deletes it from the inbox.
   - The file is identified by its id, returned by `users/:username/:files`
 
   - Response codes
@@ -454,3 +454,29 @@ storage:
     ${STORAGE_IMPLEMENTATION}:
 ```
 For more details on available configuration see [storage/v2 README.md](../../internal/storage/v2/README.md)
+
+## Audit log
+Every request to an endpoint behind authentication writes one audit event to stdout, whatever the log level, including requests that fail authentication or authorization. The event is a JSON object on its own line, with the same schema as the download service, and can be told apart from the application log by `"type":"audit"`:
+
+```json
+{"type":"audit","event":"api.request","timestamp":"2026-10-16T12:34:56.789Z","userId":"user@example.org","fileId":"3a7f2c91-b4e0-4d8a-9f3b-2c6e1a0d5f8e","correlationId":"4bf92f3577b34da6a3ce929d0e0e4736","path":"/file/ingest","httpStatus":200,"method":"POST","filePath":"inbox/file.c4gh","submissionUser":"submitter@example.org"}
+```
+
+- `type`: always `audit`.
+- `event`: always `api.request`.
+- `timestamp`: when the request finished, in UTC.
+- `userId`: the subject of the token, empty when authentication failed.
+- `correlationId`: the trace id of the request, the same value as `trace-id` in the application log.
+- `path`: the request path, without the query string, which can carry an access token.
+- `fileId`: the file the request acts on: the file id in the path, or for `POST /file/ingest`, `POST /file/cancel` and `POST /file/accession` the `fileid` query parameter or the file the body names. No other query parameter is read.
+- `httpStatus`: the status code returned to the client.
+- `method`: the HTTP method.
+- `filePath` and `submissionUser`: set by `POST /file/ingest` and `POST /file/cancel`.
+- `filePath` and `accessionId`: set by `POST /file/accession`.
+- `datasetId`: the dataset the request acts on: the dataset id in the path, or for `POST /dataset/create` the dataset the body names.
+
+The event never contains the token, the `Authorization` header or other request body content. Audit logging cannot be turned off. If the write to stdout fails, the whole event is written to the application log at error level instead, so the record is not lost.
+
+## Observability
+The API service initializes the observability package, for configuration options and additional details see
+[Observability README.md](../../pkg/observability/README.md).

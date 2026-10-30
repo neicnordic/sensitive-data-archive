@@ -203,3 +203,6 @@ sda-admin/sda-admin
 # test coverage files
 sda/coverage.txt
 sda-admin/coverage.txt
+
+# Visual Studio Code
+.vscode/

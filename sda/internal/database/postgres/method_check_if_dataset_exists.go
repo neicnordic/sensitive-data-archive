@@ -22,7 +22,7 @@ func (db *pgDb) checkIfDatasetExists(ctx context.Context, tx *sql.Tx, datasetID 
 
 	var yesNo bool
 	if err := stmt.QueryRowContext(ctx, datasetID).Scan(&yesNo); err != nil {
-		return yesNo, err
+		return yesNo, parsePQError(err)
 	}
 
 	return yesNo, nil

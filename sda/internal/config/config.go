@@ -95,16 +95,15 @@ type S3InboxConf struct {
 	ReadyPath string `mapstructure:"ready_path"`
 }
 type APIConf struct {
-	RBACpolicy  []byte
-	CACert      string
-	ServerCert  string
-	ServerKey   string
-	Host        string
-	Port        int
-	Session     SessionConfig
-	MQ          *broker.AMQPBroker
-	Grpc        Grpc
-	AuditLogger *log.Logger
+	RBACpolicy []byte
+	CACert     string
+	ServerCert string
+	ServerKey  string
+	Host       string
+	Port       int
+	Session    SessionConfig
+	MQ         *broker.AMQPBroker
+	Grpc       Grpc
 }
 
 type SessionConfig struct {
@@ -156,6 +155,11 @@ type OIDCConfig struct {
 	RevocationURL string
 	Secret        string // #nosec G117 -- Export needed to access configuration atm
 	JwkURL        string
+	// AcrValues holds the authentication context class references requested
+	// from, and required of, the OIDC provider, configured as a space separated
+	// string. When empty no specific authentication context is requested or
+	// enforced.
+	AcrValues []string
 }
 
 type CegaConfig struct {
@@ -397,6 +401,7 @@ func NewConfig(app string) (*Config, error) {
 		c.Auth.OIDC.Provider = viper.GetString("oidc.provider")
 		c.Auth.OIDC.RedirectURL = viper.GetString("oidc.redirectUrl")
 		c.Auth.OIDC.Secret = viper.GetString("oidc.secret")
+		c.Auth.OIDC.AcrValues = strings.Fields(viper.GetString("oidc.acrValues"))
 		if viper.IsSet("oidc.jwkPath") {
 			c.Auth.OIDC.JwkURL = c.Auth.OIDC.Provider + viper.GetString("oidc.jwkPath")
 		}
@@ -554,12 +559,6 @@ func (c *Config) configAPI() error {
 	api.ServerKey = viper.GetString("api.serverKey")
 	api.ServerCert = viper.GetString("api.serverCert")
 	api.CACert = viper.GetString("api.CACert")
-	if viper.GetBool("api.audit") {
-		api.AuditLogger = log.New()
-		api.AuditLogger.SetFormatter(&log.JSONFormatter{})
-		api.AuditLogger.SetOutput(os.Stdout)
-		api.AuditLogger.SetLevel(log.InfoLevel)
-	}
 
 	c.API = api
 
@@ -574,7 +573,6 @@ func (c *Config) apiDefaults() {
 	viper.SetDefault("api.session.secure", true)
 	viper.SetDefault("api.session.httponly", true)
 	viper.SetDefault("api.session.name", "api_session_key")
-	viper.SetDefault("api.audit", true)
 }
 
 // configBroker provides configuration for the message broker
@@ -883,13 +881,14 @@ func GetC4GHKey() (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer func() {
+		_ = keyFile.Close()
+	}()
 
 	key, err := keys.ReadPrivateKey(keyFile, []byte(passphrase))
 	if err != nil {
 		return nil, err
 	}
-
-	_ = keyFile.Close()
 
 	return &key, nil
 }
@@ -929,13 +928,13 @@ func GetC4GHPublicKey(keyPath string) (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	defer func() {
+		_ = keyFile.Close()
+	}()
 	key, err := keys.ReadPublicKey(keyFile)
 	if err != nil {
 		return nil, err
 	}
-
-	_ = keyFile.Close()
 
 	return &key, nil
 }

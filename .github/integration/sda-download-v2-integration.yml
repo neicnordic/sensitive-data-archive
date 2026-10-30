@@ -23,25 +23,16 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
-  # MinIO for archive storage
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data --console-address ":9001"
+  # Ceph RGW for archive storage
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
     environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
+      - S3_BUCKETS=archive
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   # Mock AAI for JWT validation
   mock-aai:
@@ -75,7 +66,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -86,42 +77,50 @@ services:
       - "/bin/sh"
       - "-c"
       - |
+        set -e
         sh /scripts/make_download_credentials.sh
+        sh /scripts/make_download_v2_testfile.sh
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.11-slim-bookworm
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
 
-  # Initialize MinIO with archive bucket and test data
-  minio_init:
-    container_name: minio_init
-    image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+  # Upload the header-stripped body of the real test file to the archive bucket
+  s3_seed:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
+    container_name: s3_seed
     depends_on:
-      minio:
+      s3:
         condition: service_healthy
       credentials:
         condition: service_completed_successfully
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set myminio http://s3:9000 access secretKey;
-      mc mb myminio/archive || true;
-      dd if=/dev/urandom bs=1000 count=1 2>/dev/null | mc pipe myminio/archive/test-file.c4gh;
-      echo 'MinIO initialized with archive bucket and test file';
-      "
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -e
+        python3 /scripts/s3.py PUT http://s3:9000/archive/test-file.c4gh /shared/testfile.body
+        echo 'Ceph RGW seeded with archive/test-file.c4gh'
+    healthcheck:
+      disable: true
+    volumes:
+      - shared:/shared
 
   # Seed database with test data (files and datasets)
   database_seed:
     container_name: database_seed
-    image: postgres:15.4-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:postgres-15.4-alpine
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio_init:
+      s3_seed:
         condition: service_completed_successfully
     environment:
       - PGHOST=postgres
@@ -133,40 +132,10 @@ services:
       - "/bin/sh"
       - "-c"
       - |
-        # Wait for postgres to be ready
-        pg_isready -h postgres -p 5432 -U postgres
-
-        # Insert test file
-        psql -c "INSERT INTO sda.files (
-          id, stable_id, submission_user, submission_file_path, 
-          archive_file_path, archive_location, archive_file_size, decrypted_file_size,
-          header, encryption_method
-        ) VALUES (
-          'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
-          'EGAF00000000001',
-          'integration_test@example.org',
-          'test-file.c4gh',
-          'test-file.c4gh',
-          's3:9000/archive',
-          1000,
-          500,
-          '63727970743467680100000000000000',
-          'CRYPT4GH'
-        ) ON CONFLICT DO NOTHING;"
-
-        # Insert test dataset (id is SERIAL, so let postgres generate it)
-        psql -c "INSERT INTO sda.datasets (stable_id, title) 
-          VALUES ('EGAD00000000001', 'Test Dataset')
-          ON CONFLICT DO NOTHING;"
-
-        # Get the dataset id and link file to dataset
-        psql -c "INSERT INTO sda.file_dataset (file_id, dataset_id)
-          SELECT 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'::uuid, d.id 
-          FROM sda.datasets d 
-          WHERE d.stable_id = 'EGAD00000000001'
-          ON CONFLICT DO NOTHING;"
-
-        echo 'Database seeded with test data';
+        sh /scripts/seed_download_v2_db.sh
+    volumes:
+      - ./scripts:/scripts
+      - shared:/shared
 
   # Mock OIDC server for opaque token auth and visa validation
   mockauth:
@@ -178,7 +147,7 @@ services:
         pip install aiohttp Authlib joserfc > /dev/null
         python -u /mockoidc.py
     container_name: mockauth
-    image: python:3.10-slim
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts/mockoidc.py:/mockoidc.py
     ports:
@@ -247,10 +216,9 @@ services:
     environment:
       - DOWNLOAD_URL=http://download:8080
       - JWT_KEY_FILE=/shared/keys/jwt.key
-      - C4GH_PUBKEY_FILE=/shared/c4gh.pub.pem
     extra_hosts:
       - "localhost:host-gateway"
-    image: golang:1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
     profiles:
       - tests
     volumes:
@@ -258,7 +226,6 @@ services:
       - ./tests/download:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   shared:
 

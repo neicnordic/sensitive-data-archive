@@ -51,6 +51,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
         with:
+          version: v2.14.0
           args: --timeout 5m
           working-directory: sda-download
 
@@ -72,6 +73,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
         with:
+          version: v2.14.0
           args: --timeout 5m
           working-directory: sda
 
@@ -93,6 +95,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
         with:
+          version: v2.14.0
           args: --timeout 5m
           working-directory: sda-validator/orchestrator
 
@@ -114,5 +117,6 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
         with:
+          version: v2.14.0
           args: --timeout 5m
           working-directory: sda-admin

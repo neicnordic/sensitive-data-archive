@@ -126,12 +126,23 @@ jobs:
           format: template
           template: '@.github/trivy_report_template_markdown.tpl'
           output: trivy-results.md
+          # Same filter as the sarif scan above, so the PR comment only lists
+          # what the Security tab would flag; medium and unfixable findings
+          # otherwise repeat once per statically linked binary.
+          ignore-unfixed: true
+          severity: "CRITICAL,HIGH"
 
       - name: Generate PR comment
         if: steps.changes.outputs.changed == 'true'
         run: |
-          echo "## 🔍 Trivy Scan - ${{ matrix.name }} 🔍" > trivy-comment.md
-          cat trivy-results.md >> trivy-comment.md
+          {
+            echo "## 🔍 Trivy Scan - ${{ matrix.name }} 🔍"
+            echo "<details><summary>Critical and high findings with a fix available</summary>"
+            echo
+            cat trivy-results.md
+            echo
+            echo "</details>"
+          } > trivy-comment.md
 
       - name: Comment PR
         if: steps.changes.outputs.changed == 'true'
@@ -139,6 +150,16 @@ jobs:
         with:
           header: ${{ matrix.name }} Trivy results
           path: trivy-comment.md
+
+  check_mirror:
+    name: Check CI image mirror
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Check that the integration stacks only use mirrored images
+        run: bash .github/integration/scripts/check_mirror.sh
 
   rabbitmq_test_federated:
     needs:
@@ -248,6 +269,16 @@ jobs:
             bash -x "$runscript";
           done
 
+      - name: Show container state and logs
+        if: failure()
+        run: |
+          docker ps -a
+          for c in $(docker ps -aq); do
+            echo "::group::$(docker inspect -f '{{.Name}} ({{.State.Status}}, exit {{.State.ExitCode}})' "$c")"
+            docker logs --tail 200 "$c" 2>&1
+            echo "::endgroup::"
+          done
+
   sda-download-v2_integration_test:
     needs:
       - build_images
@@ -311,6 +342,7 @@ jobs:
     needs:
       - build_images
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       matrix:
         deployment: ["federated", "isolated"]

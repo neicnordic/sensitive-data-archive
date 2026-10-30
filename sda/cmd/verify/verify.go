@@ -7,35 +7,42 @@ import (
 	"context"
 	"crypto/md5"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
+	"time"
 
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
+	verifyconfig "github.com/neicnordic/sensitive-data-archive/cmd/verify/config"
+	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
-	amqp "github.com/rabbitmq/amqp091-go"
-
+	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-var (
+type verify struct {
 	db             database.Database
-	mqBroker       *broker.AMQPBroker
+	broker         broker.Broker
 	archiveReader  storage.Reader
 	archiveKeyList []*[32]byte
-)
+	schemaPath     string
+	routingKey     string
+}
 
 func main() {
 	if err := run(); err != nil {
@@ -46,265 +53,251 @@ func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := configv2.Load(); err != nil {
+	err := configv2.Load()
+	if err != nil {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	conf, err := config.NewConfig("verify")
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-verify")
 	if err != nil {
-		return fmt.Errorf("failed to load config, due to: %v", err)
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
 	}
-	db, err = postgres.NewPostgresSQLDatabase()
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(shutdownCtx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+		shutdownCancel()
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	app := &verify{
+		schemaPath: verifyconfig.SchemaPath(),
+		routingKey: verifyconfig.RoutingKey(),
+	}
+
+	app.db, err = postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer db.Close()
-
-	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
-	}
-	mqBroker, err = broker.NewMQ(conf.Broker)
-	if err != nil {
-		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
-	}
 	defer func() {
-		if mqBroker == nil {
-			return
-		}
-		if mqBroker.Channel != nil {
-			if err := mqBroker.Channel.Close(); err != nil {
-				log.Errorf("failed to close mq broker channel due to: %v", err)
-			}
-		}
-		if mqBroker.Connection != nil {
-			if err := mqBroker.Connection.Close(); err != nil {
-				log.Errorf("failed to close mq broker connection due to: %v", err)
-			}
+		if err := app.db.Close(); err != nil {
+			slog.Warn("failed to close database", slog.Any("error", err))
 		}
 	}()
 
-	archiveReader, err = storage.NewReader(ctx, "archive")
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
+		return errors.Join(errors.New("database schema v23 is required"), err)
+	}
+
+	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to initialize mq broker: %v", err)
+	}
+
+	defer func() {
+		if app.broker == nil {
+			return
+		}
+		if err := app.broker.Close(); err != nil {
+			slog.Warn("failed to close broker", slog.Any("error", err))
+		}
+	}()
+
+	app.archiveReader, err = storage.NewReader(ctx, "archive")
 	if err != nil {
 		return fmt.Errorf("failed to initialize archive reader, due to: %v", err)
 	}
-	archiveKeyList, err = config.GetC4GHprivateKeys()
-	if err != nil || len(archiveKeyList) == 0 {
+	app.archiveKeyList, err = config.GetC4GHprivateKeys()
+	if err != nil || len(app.archiveKeyList) == 0 {
 		return errors.New("no C4GH private keys configured")
 	}
 
-	consumerErr := make(chan error, 1)
-	log.Info("starting verify service")
+	consumeErr := make(chan error, 1)
+	slog.Info("verify service started")
 	go func() {
-		consumerErr <- startConsumer(ctx)
+		consumeErr <- app.broker.Subscribe(ctx, verifyconfig.SourceQueue(), app.handleMessage)
 	}()
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
-	case <-sigc:
-	case err := <-mqBroker.Connection.NotifyClose(make(chan *amqp.Error)):
-		return err
-	case err := <-mqBroker.Channel.NotifyClose(make(chan *amqp.Error)):
-		return err
-	case err := <-consumerErr:
-		return err
-	}
+	case sig := <-sigc:
+		slog.Info("received signal, shutting down gracefully", slog.String("signal", sig.String()))
+		cancel()
 
-	return nil
+		// Subscribe returns once the handler that was running has finished
+		// and acked its message; broker.shutdown_grace cancels the handler's
+		// context after that long, but the handler decides when it returns.
+		// A second signal skips the wait.
+		select {
+		case err := <-consumeErr:
+			if err != nil && !errors.Is(err, context.Canceled) {
+				slog.Error("consumer failure during shutdown", slog.Any("error", err))
+			}
+		case sig := <-sigc:
+			slog.Warn("received a second signal, not waiting for the running handler", slog.String("signal", sig.String()))
+		}
+
+		return nil
+	case err := <-consumeErr:
+		if !errors.Is(err, context.Canceled) {
+			slog.Error("consumer failure", slog.Any("error", err), slog.String("source-queue", verifyconfig.SourceQueue()))
+			cancel()
+
+			return err
+		}
+
+		return nil
+	}
 }
-func startConsumer(ctx context.Context) error {
-	messages, err := mqBroker.GetMessages(mqBroker.Conf.Queue)
-	if err != nil {
-		return fmt.Errorf("failed to get messages (error: %v) ", err)
-	}
-	for delivered := range messages {
-		handleMessage(ctx, delivered)
-	}
 
-	return nil
+// encryptedSegmentSize wraps headers.EncryptedSegmentSize and turns a panic from
+// the crypt4gh header parser into an error. A packet that decrypts with this key
+// but has an unknown packet type makes the parser panic on crypt4gh v1.15.0;
+// recovering here makes that key simply not match instead of crashing verify
+// before the decryption copy.
+func encryptedSegmentSize(header []byte, key [32]byte) (size int, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			size = 0
+			err = fmt.Errorf("panic while parsing crypt4gh header: %v", r)
+		}
+	}()
+
+	return headers.EncryptedSegmentSize(header, key)
 }
 
-func handleMessage(ctx context.Context, delivered amqp.Delivery) {
+// copyDecrypted copies the decrypted crypt4gh stream and turns any panic from
+// the reader into an error. A file whose archive object was truncated part way
+// into a data segment makes the crypt4gh reader panic on an out-of-range slice;
+// recovering here fails this one message to the error queue instead of crashing
+// the whole verify service and re-processing the same poison message forever.
+func copyDecrypted(dst io.Writer, src io.Reader) (n int64, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic while decrypting file: %v", r)
+		}
+	}()
+
+	return io.Copy(dst, src)
+}
+
+func (app *verify) handleMessage(ctx context.Context, message *broker.Message) ([]func(), error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	log.Debugf("received a message (correlation-id: %s, message: %s)", delivered.CorrelationId, delivered.Body)
-	err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", mqBroker.Conf.SchemasPath), delivered.Body)
-	if err != nil {
-		log.Errorf("validation of incoming message (ingestion-verification) failed, correlation-id: %s, reason: (%s)", delivered.CorrelationId, err.Error())
-		// Send the message to an error queue so it can be analyzed.
-		infoErrorMessage := broker.InfoError{
-			Error:           "Message validation failed",
-			Reason:          err.Error(),
-			OriginalMessage: delivered,
-		}
+	ctx, span := observability.StartSpan(ctx, "handleMessage", attribute.String("message-key", message.Key))
+	defer span.End()
 
-		body, _ := json.Marshal(infoErrorMessage)
-		if err := mqBroker.SendMessage(delivered.CorrelationId, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: %v", err)
-		}
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to Ack message, reason: %v", err)
-		}
+	if err := schema.ValidateJSON(fmt.Sprintf("%s/ingestion-verification.json", app.schemaPath), message.Body); err != nil {
+		slog.Error("validation of incoming message failed", "error", err)
 
-		// Restart on new message
-		return
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "validation of incoming message failed")}, nil
 	}
 
-	var message schema.IngestionVerification
+	var ingestionVerification schema.IngestionVerification
 	// we unmarshal the message in the validation step so this is safe to do
-	_ = json.Unmarshal(delivered.Body, &message)
+	_ = json.Unmarshal(message.Body, &ingestionVerification)
 
-	log.Infof(
-		"Received work (message.correlation-id: %s, file-id: %s, filepath: %s, user: %s)",
-		delivered.CorrelationId, message.FileID, message.FilePath, message.User,
+	span.SetAttributes(
+		attribute.String("file-id", ingestionVerification.FileID),
+		attribute.String("file-path", ingestionVerification.FilePath),
+		attribute.String("user", ingestionVerification.User),
 	)
 
 	// If the file has been canceled by the uploader, don't spend time working on it.
-	status, err := db.GetFileStatus(ctx, message.FileID)
+	status, err := app.db.GetFileStatus(ctx, ingestionVerification.FileID)
 	if err != nil {
-		log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
-		// Send the message to an error queue so it can be analyzed.
-		infoErrorMessage := broker.InfoError{
-			Error:           "Getheader failed",
-			Reason:          err.Error(),
-			OriginalMessage: message,
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Error("file status not found", err)
+
+			return []func(){app.errorQueue(ctx, message, "file status not found")}, nil
 		}
 
-		body, _ := json.Marshal(infoErrorMessage)
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-		}
+		span.Warn("failed to get file status",
+			slog.Any("error", err),
+		)
 
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
-		}
-
-		return
-	}
-	if status == "disabled" {
-		log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
-		}
-
-		return
+		return nil, err
 	}
 
-	header, err := db.GetHeader(ctx, message.FileID)
-	if err != nil {
-		log.Errorf("GetHeader failed for file with ID: %v, reason: %v", message.FileID, err.Error())
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed to nack following getheader error message")
-		}
-		// store full message info in case we want to fix the db entry and retry
-		infoErrorMessage := broker.InfoError{
-			Error:           "Getheader failed",
-			Reason:          err.Error(),
-			OriginalMessage: message,
-		}
+	if status == "disabled" || status == "removed" {
+		span.Info("file is disabled or removed, stopping verification", slog.String("status", status))
 
-		body, _ := json.Marshal(infoErrorMessage)
-
-		// Send the message to an error queue so it can be analyzed.
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-		}
-
-		return
+		return nil, nil
 	}
 
-	archiveLocation, err := db.GetArchiveLocation(ctx, message.FileID)
+	header, err := app.db.GetHeader(ctx, ingestionVerification.FileID)
 	if err != nil {
-		log.Errorf("failed to get archive location of file: %s, error: %v", message.FileID, err)
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Error("file header not found", err)
 
-		if err := delivered.Nack(false, true); err != nil {
-			log.Errorf("failed to Nack message, reason: (%s)", err.Error())
+			return []func(){app.errorQueue(ctx, message, "file header not found")}, nil
 		}
 
-		return
+		span.Warn("failed to get file header", slog.Any("error", err))
+
+		return nil, err
+	}
+
+	archiveLocation, err := app.db.GetArchiveLocation(ctx, ingestionVerification.FileID)
+	if err != nil {
+		span.Error("failed to get archive location", err)
+
+		return nil, err
 	}
 	if archiveLocation == "" {
-		log.Errorf("archive location for file: %s, not known in database", message.FileID)
-		jsonMsg, _ := json.Marshal(map[string]string{"error": "archive location for file not known in database"})
-		if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
-			log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
+		span.Error("archive location for file not known", nil)
+
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error": "archive location for file not known"}`, string(message.Body)); err != nil {
+			slog.Warn("failed to update file event log to error",
+				slog.Any("error", err),
+			)
+
+			return nil, err
 		}
 
-		// Send the message to an error queue so it can be analyzed.
-		infoErrorMessage := broker.InfoError{
-			Error:           "GetArchiveLocation failed",
-			Reason:          "archive location for file not known in database",
-			OriginalMessage: message,
-		}
-
-		body, _ := json.Marshal(infoErrorMessage)
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-		}
-
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
-		}
-
-		return
+		return []func(){app.errorQueue(ctx, message, "archive location for file not known")}, nil
 	}
 
 	file := new(database.FileInfo)
-	file.Size, err = archiveReader.GetFileSize(ctx, archiveLocation, message.ArchivePath)
+	file.Size, err = app.archiveReader.GetFileSize(ctx, archiveLocation, ingestionVerification.ArchivePath)
 	if err != nil { //nolint:nestif
-		log.Errorf("Failed to get archived file size, file-id: %s, archive-path: %s, reason: (%s)", message.FileID, message.ArchivePath, err.Error())
-		if strings.Contains(err.Error(), "no such file or directory") || strings.Contains(err.Error(), "NoSuchKey:") || strings.Contains(err.Error(), "NotFound:") {
-			jsonMsg, _ := json.Marshal(map[string]string{"error": err.Error()})
-			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", string(jsonMsg), string(delivered.Body)); err != nil {
-				log.Errorf("failed to set ingestion status for file from message, file-id: %v", message.FileID)
+		span.Warn("failed to get file size from archive storage",
+			slog.Any("error", err),
+		)
+		if errors.Is(err, storageerrors.ErrorFileNotFoundInLocation) {
+			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"file not found in archive storage"}`, string(message.Body)); err != nil {
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
+
+				return nil, err
 			}
+
+			return []func(){app.errorQueue(ctx, message, "file not found in archive storage")}, nil
 		}
 
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed to Ack message, reason: (%s)", err.Error())
-		}
-
-		// Send the message to an error queue so it can be analyzed.
-		fileError := broker.InfoError{
-			Error:           "Failed to get archived file size",
-			Reason:          err.Error(),
-			OriginalMessage: message,
-		}
-		body, _ := json.Marshal(fileError)
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-		}
-
-		return
+		return nil, err
 	}
 
-	archiveFileHash := sha256.New()
-	f, err := archiveReader.NewFileReader(ctx, archiveLocation, message.ArchivePath)
+	archivedChecksum := sha256.New()
+	f, err := app.archiveReader.NewFileReader(ctx, archiveLocation, ingestionVerification.ArchivePath)
 	if err != nil {
-		log.Errorf("Failed to open archived file, file-id: %s, reason: %v ", message.FileID, err.Error())
-		// Send the message to an error queue so it can be analyzed.
-		infoErrorMessage := broker.InfoError{
-			Error:           "Failed to open archived file",
-			Reason:          err.Error(),
-			OriginalMessage: message,
-		}
+		span.Warn("failed to read file from archive storage", slog.Any("error", err))
 
-		body, _ := json.Marshal(infoErrorMessage)
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-		}
-
-		// Restart on new message
-		return
+		return nil, err
 	}
 	defer func() {
 		_ = f.Close()
 	}()
 
 	var key *[32]byte
-	for _, k := range archiveKeyList {
-		size, err := headers.EncryptedSegmentSize(header, *k)
+	for _, k := range app.archiveKeyList {
+		size, err := encryptedSegmentSize(header, *k)
 		if (err == nil) && (size != 0) {
 			key = k
 
@@ -313,191 +306,219 @@ func handleMessage(ctx context.Context, delivered amqp.Delivery) {
 	}
 
 	if key == nil {
-		log.Errorf("no matching key found for file, file-id: %s, archive-path: %s", message.FileID, message.ArchivePath)
+		span.Error("no matching key found for file", nil)
 
-		return
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"no matching c4gh key found for file"}`, string(message.Body)); err != nil {
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
+
+			return nil, err
+		}
+
+		return nil, nil
 	}
 
-	mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archiveFileHash))
+	mr := io.MultiReader(bytes.NewReader(header), io.TeeReader(f, archivedChecksum))
 	c4ghr, err := streaming.NewCrypt4GHReader(mr, *key, nil)
 	if err != nil {
-		log.Errorf("failed to open c4gh decryptor stream, file-id: %s, archive-path: %s, reason: %s", message.FileID, message.ArchivePath, err.Error())
+		span.Warn("failed to open c4gh decryptor stream", slog.Any("error", err))
 
-		return
+		return nil, err
 	}
 	defer func() {
 		if err := c4ghr.Close(); err != nil {
-			log.Errorf("failed to close crypt4gh reader, file-id %s, reason: %v", message.FileID, err)
+			span.Warn("failed to close crypt4gh reader", slog.Any("error", err))
 		}
 	}()
 
 	md5hash := md5.New()
-	sha256hash := sha256.New()
+	decryptedChecksum := sha256.New()
 	stream := io.TeeReader(c4ghr, md5hash)
 
-	if file.DecryptedSize, err = io.Copy(sha256hash, stream); err != nil {
-		log.Errorf("failed to copy decrypted data, file-id: %s, reason: (%s)", message.FileID, err.Error())
+	if file.DecryptedSize, err = copyDecrypted(decryptedChecksum, stream); err != nil {
+		if errors.Is(err, context.Canceled) || ctx.Err() != nil {
+			span.Warn("context canceled while decrypting file")
 
-		// Send the message to an error queue so it can be analyzed.
-		infoErrorMessage := broker.InfoError{
-			Error:           "Failed to verify archived file",
-			Reason:          err.Error(),
-			OriginalMessage: message,
+			return nil, err
 		}
 
-		body, _ := json.Marshal(infoErrorMessage)
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-			log.Errorf("Failed to publish error message, reason: (%s)", err.Error())
+		span.Error("failed to copy decrypted data", err)
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"failed to copy decrypted data"}`, string(message.Body)); err != nil {
+			span.Error("failed to update file event log to error", err)
+
+			return nil, err
 		}
 
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed to ack message, reason: (%s)", err.Error())
-		}
-
-		return
+		return []func(){app.errorQueue(ctx, message, "failed to copy decrypted data")}, nil
 	}
 
 	// At this point we should do checksum comparison
-	file.ArchivedChecksum = fmt.Sprintf("%x", archiveFileHash.Sum(nil))
-	file.DecryptedChecksum = fmt.Sprintf("%x", sha256hash.Sum(nil))
+	file.ArchivedChecksum = fmt.Sprintf("%x", archivedChecksum.Sum(nil))
+	file.DecryptedChecksum = fmt.Sprintf("%x", decryptedChecksum.Sum(nil))
 
 	switch {
-	case message.ReVerify:
-		decrypted, err := db.GetDecryptedChecksum(ctx, message.FileID)
+	case ingestionVerification.ReVerify:
+		decrypted, err := app.db.GetDecryptedChecksum(ctx, ingestionVerification.FileID)
 		if err != nil {
-			log.Errorf("failed to get unencrypted checksum for file, file-id: %s, reason: %s", message.FileID, err.Error())
-			if err := delivered.Nack(false, true); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+			span.Warn("failed to get unencrypted checksum for file", slog.Any("error", err))
 
-			return
+			return nil, err
 		}
 
 		if file.DecryptedChecksum != decrypted {
-			log.Errorf("encrypted checksum don't match for file, file-id: %s", message.FileID)
-			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(delivered.Body)); err != nil {
-				log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
+			span.Error("decrypted checksum don't match for file", nil)
+			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(message.Body)); err != nil {
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
 
-				return
-			}
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("Failed to ack message, reason: (%s)", err.Error())
+				return nil, err
 			}
 
-			return
+			return nil, nil
 		}
 
-		if file.ArchivedChecksum != message.EncryptedChecksums[0].Value {
-			log.Errorf("encrypted checksum mismatch for file, file-id: %s, filepath: %s, expected: %s, got: %s", message.FileID, message.FilePath, message.EncryptedChecksums[0].Value, file.ArchivedChecksum)
-			if err := db.UpdateFileEventLog(ctx, message.FileID, "error", "verify", `{"error":"encrypted checksum don't match"}`, string(delivered.Body)); err != nil {
-				log.Errorf("set status ready failed, file-id: %s, reason: (%v)", message.FileID, err)
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%v)", err)
-				}
+		if file.ArchivedChecksum != ingestionVerification.EncryptedChecksums[0].Value {
+			span.Error("archived checksum don't match for file", nil)
+			if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"archived checksum don't match"}`, string(message.Body)); err != nil {
+				span.Warn("failed to update file event log to error", slog.Any("error", err))
 
-				return
+				return nil, err
 			}
+
+			return nil, nil
 		}
 
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("Failed to ack message, reason: (%s)", err.Error())
-		}
-
-		return
+		return nil, nil
 	default:
-		c := schema.IngestionAccessionRequest{
-			User:     message.User,
-			FilePath: message.FilePath,
-			DecryptedChecksums: []schema.Checksums{
-				{Type: "sha256", Value: fmt.Sprintf("%x", sha256hash.Sum(nil))},
-				{Type: "md5", Value: fmt.Sprintf("%x", md5hash.Sum(nil))},
-			},
+	}
+
+	c := schema.IngestionAccessionRequest{
+		User:     ingestionVerification.User,
+		FilePath: ingestionVerification.FilePath,
+		DecryptedChecksums: []schema.Checksums{
+			{Type: "sha256", Value: fmt.Sprintf("%x", decryptedChecksum.Sum(nil))},
+			{Type: "md5", Value: fmt.Sprintf("%x", md5hash.Sum(nil))},
+		},
+	}
+
+	verifiedMessage, _ := json.Marshal(&c)
+	err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession-request.json", app.schemaPath), verifiedMessage)
+	if err != nil {
+		span.Error("validation of outgoing message failed", err)
+
+		// send message to error queue and do not requeue
+		return []func(){app.errorQueue(ctx, message, "validation of outgoing message failed")}, nil
+	}
+
+	storedFileInfo, err := app.db.GetFileInfo(ctx, ingestionVerification.FileID)
+	if err != nil {
+		span.Warn("failed to get file info", slog.Any("error", err))
+
+		return nil, err
+	}
+
+	if storedFileInfo.DecryptedChecksum != "" && storedFileInfo.DecryptedChecksum != file.DecryptedChecksum {
+		// This indicates that the file has been verified previously and reuploaded & ingested without first being cancelled
+
+		span.Error("decrypted checksum don't match for file", nil)
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"decrypted checksum don't match"}`, string(message.Body)); err != nil {
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
+
+			return nil, err
 		}
 
-		verifiedMessage, _ := json.Marshal(&c)
-		err = schema.ValidateJSON(fmt.Sprintf("%s/ingestion-accession-request.json", mqBroker.Conf.SchemasPath), verifiedMessage)
-		if err != nil {
-			log.Errorf("Validation of outgoing (ingestion-accession-request) failed, file-id: %s, reason: (%s)", message.FileID, err.Error())
-			// Logging is in ValidateJSON so just restart on new message
-			return
-		}
-		status, err := db.GetFileStatus(ctx, message.FileID)
-		if err != nil {
-			log.Errorf("failed to get file status, file-id: %s, reason: (%s)", message.FileID, err.Error())
-			// Send the message to an error queue so it can be analyzed.
-			infoErrorMessage := broker.InfoError{
-				Error:           "Getheader failed",
-				Reason:          err.Error(),
-				OriginalMessage: message,
-			}
+		return nil, nil
+	}
 
-			body, _ := json.Marshal(infoErrorMessage)
-			if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, "error", body); err != nil {
-				log.Errorf("failed to publish message, reason: (%s)", err.Error())
-			}
+	if storedFileInfo.ArchivedChecksum != "" && storedFileInfo.ArchivedChecksum != file.ArchivedChecksum {
+		// This indicates that the file has been verified previously then reuploaded & ingested without first being cancelled
+		span.Error("archived checksum don't match for file", nil)
+		if err := app.db.UpdateFileEventLog(ctx, ingestionVerification.FileID, "error", "verify", `{"error":"archived checksum don't match"}`, string(message.Body)); err != nil {
+			span.Warn("failed to update file event log to error", slog.Any("error", err))
 
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
-			}
-
-			return
+			return nil, err
 		}
 
-		if status == "disabled" {
-			log.Infof("file with file-id: %s is disabled, stopping verification", message.FileID)
-			if err := delivered.Ack(false); err != nil {
-				log.Errorf("Failed acking canceled work, reason: (%s)", err.Error())
-			}
+		return nil, nil
+	}
 
-			return
+	tx, err := app.db.BeginTransaction(ctx)
+	if err != nil {
+		span.Warn("failed to begin transaction", slog.Any("error", err))
+		// requeue message as db error is not expected and should succeed on retries
+		return nil, err
+	}
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			span.Error("failed to rollback transaction", err)
+		}
+	}()
+
+	// Here we check the file status again to ensure it has not been canceled or removed during the verification
+	// and we don't override that with a verified file event
+	status, err = tx.GetFileStatus(ctx, ingestionVerification.FileID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			span.Error("file status not found after verification", err)
+
+			return []func(){app.errorQueue(ctx, message, "file status not found after verification")}, nil
 		}
 
-		fileInfo, err := db.GetFileInfo(ctx, message.FileID)
-		if err != nil {
-			log.Errorf("failed to get info for file, file-id: %s", message.FileID)
-			if err := delivered.Nack(false, true); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+		span.Warn("failed to get file status after verification", slog.Any("error", err))
 
-			return
-		}
+		return nil, err
+	}
 
-		if fileInfo.DecryptedChecksum != fmt.Sprintf("%x", sha256hash.Sum(nil)) {
-			if err := db.SetVerified(ctx, file, message.FileID); err != nil {
-				log.Errorf("SetVerified failed, file-id: %s, reason: (%s)", message.FileID, err.Error())
-				if err := delivered.Nack(false, true); err != nil {
-					log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-				}
+	if status == "disabled" || status == "removed" {
+		span.Info("file was disabled or removed during verification", slog.String("status", status))
 
-				return
-			}
-		} else {
-			log.Infof("file is already verified, file-id: %s", message.FileID)
-		}
+		return nil, nil
+	}
 
-		if err := db.UpdateFileEventLog(ctx, message.FileID, "verified", "ingest", "{}", string(verifiedMessage)); err != nil {
-			log.Errorf("failed to set event log status for file, file-id: %s", message.FileID)
-			if err := delivered.Nack(false, true); err != nil {
-				log.Errorf("failed to Nack message, reason: (%s)", err.Error())
-			}
+	if storedFileInfo.DecryptedChecksum == "" || storedFileInfo.ArchivedChecksum == "" {
+		if err := tx.SetVerified(ctx, file, ingestionVerification.FileID); err != nil {
+			span.Warn("failed to set file as verified", slog.Any("error", err))
 
-			return
-		}
-
-		// Send message to verified queue
-		if err := mqBroker.SendMessage(message.FileID, mqBroker.Conf.Exchange, mqBroker.Conf.RoutingKey, verifiedMessage); err != nil {
-			// TODO fix resend mechanism
-			log.Errorf("failed to publish message, reason: (%s)", err.Error())
-
-			return
-		}
-
-		if err := delivered.Ack(false); err != nil {
-			log.Errorf("failed to Ack message, reason: (%s)", err.Error())
+			return nil, err
 		}
 	}
-	log.Infof("Successfully verified the file, file-id: %s, filepath: %s", message.FileID, message.FilePath)
+
+	if err := tx.UpdateFileEventLog(ctx, ingestionVerification.FileID, "verified", "verify", "{}", string(verifiedMessage)); err != nil {
+		span.Warn("failed to update file event log to verified", slog.Any("error", err))
+
+		return nil, err
+	}
+
+	if err := tx.Commit(); err != nil {
+		span.Warn("failed to commit transaction", slog.Any("error", err))
+		// requeue message as db error is not expected and should succeed on retries
+		return nil, err
+	}
+
+	// Publish verified message
+	err = app.broker.Publish(ctx, app.routingKey, broker.Message{
+		Key:  ingestionVerification.FileID,
+		Body: verifiedMessage,
+	})
+	if err != nil {
+		span.Error("failed to publish verified message", err)
+
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (app *verify) errorQueue(ctx context.Context, originMessage *broker.Message, errorQueueReason string) func() {
+	return func() {
+		// Using context.WithoutCancel as this will run as a callback func after handleMessage ctx is canceled, but keeping context to start span under it
+		ctx, span := observability.StartSpan(context.WithoutCancel(ctx), "errorQueue", attribute.String("error-queue-reason", errorQueueReason))
+		defer span.End()
+
+		if originMessage.Headers == nil {
+			originMessage.Headers = make(map[string]any)
+		}
+		originMessage.Headers["error-queue-reason"] = errorQueueReason
+		if err := app.broker.Publish(ctx, "error", *originMessage); err != nil {
+			span.Error("failed to publish to error queue", err)
+		}
+	}
 }

@@ -11,10 +11,50 @@ services:
         condition: service_healthy
     environment:
       - PGPASSWORD=rootpasswd
-    image: python:3.13-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - shared:/shared
+
+  tempo:
+    image: ghcr.io/neicnordic/sda-ci-mirror:grafana-tempo-3.0.2
+    container_name: tempo
+    command: [ "-config.file=/etc/tempo.yaml" ]
+    volumes:
+      - ./sda/tempo.yaml:/etc/tempo.yaml
+    ports:
+      - "3200:3200" # Tempo API
+      - "4317:4317" # OTLP gRPC ingest
+      - "4318:4318" # OTLP HTTP ingest
+
+  prometheus:
+    container_name: prometheus
+    image: ghcr.io/neicnordic/sda-ci-mirror:prom-prometheus-v3.14.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --web.enable-remote-write-receiver
+    volumes:
+      - "./sda/prometheus.yml:/etc/prometheus/prometheus.yml"
+    extra_hosts:
+      - "localhost:host-gateway"
+    ports:
+      - 9090:9090
+
+  grafana:
+    image: ghcr.io/neicnordic/sda-ci-mirror:grafana-grafana-enterprise-13.2.1
+    depends_on:
+      tempo:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    container_name: grafana
+    ports:
+      - '3000:3000'
+    volumes:
+      - grafana-storage:/var/lib/grafana
+      - ./sda/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml
+    extra_hosts:
+      - "localhost:host-gateway"
 
   postgres:
     build:
@@ -57,38 +97,26 @@ services:
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
 
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
-    command: server /data  --console-address ":9001"
+  s3:
+    extends:
+      file: ceph-rgw.yml
+      service: ceph
     container_name: s3
-    environment:
-      - MINIO_ROOT_USER=access
-      - MINIO_ROOT_PASSWORD=secretKey
-      - MINIO_SERVER_URL=http://127.0.0.1:9000
-    healthcheck:
-      test: ["CMD", "curl", "-fkq", "http://localhost:9000/minio/health/live"]
-      interval: 10s
-      timeout: 2s
-      retries: 6
     ports:
       - "19000:9000"
-      - "19001:9001"
-    volumes:
-      - minio_data:/data
 
   s3inbox:
     build:
       args:
         GOLANG_VERSION: ${GOLANG_VERSION:-1.20}
       context: ../../sda
-      target: debug
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-s3inbox]
     container_name: s3inbox
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       mock-aai:
         condition: service_healthy
@@ -96,12 +124,17 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+      grafana:
+        condition: service_started
     environment:
       - BROKER_PASSWORD=inbox
       - BROKER_USER=inbox
-      - BROKER_ROUTINGKEY=inbox
+      - ROUTING_KEY=inbox
       - DATABASE_PASSWORD=inbox
       - DATABASE_USER=inbox
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     restart: always
@@ -111,6 +144,7 @@ services:
     ports:
       - "18000:8000"
       - "18001:8001"
+      - "9092:9464"
 
   ingest:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -119,7 +153,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -132,10 +166,17 @@ services:
       - BROKER_ROUTINGKEY=archived
       - DATABASE_PASSWORD=ingest
       - DATABASE_USER=ingest
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9093:9464"
 
   verify:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -144,7 +185,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -153,14 +194,19 @@ services:
     environment:
       - BROKER_PASSWORD=verify
       - BROKER_USER=verify
-      - BROKER_QUEUE=archived
-      - BROKER_ROUTINGKEY=verified
       - DATABASE_PASSWORD=verify
       - DATABASE_USER=verify
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9094:9464"
 
   finalize:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -169,7 +215,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -178,14 +224,21 @@ services:
     environment:
       - BROKER_PASSWORD=finalize
       - BROKER_USER=finalize
-      - BROKER_QUEUE=accession
-      - BROKER_ROUTINGKEY=completed
+      - SOURCE_QUEUE=accession
+      - ROUTING_KEY=completed
       - DATABASE_PASSWORD=finalize
       - DATABASE_USER=finalize
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9095:9464"
 
   mapper:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -194,7 +247,7 @@ services:
     depends_on:
       credentials:
         condition: service_completed_successfully
-      minio:
+      s3:
         condition: service_healthy
       postgres:
         condition: service_healthy
@@ -206,10 +259,17 @@ services:
       - BROKER_QUEUE=mappings
       - DATABASE_PASSWORD=mapper
       - DATABASE_USER=mapper
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
+    ports:
+      - "9096:9464"
 
   api:
     command: [sda-api]
@@ -228,11 +288,15 @@ services:
       - BROKER_USER=api
       - DATABASE_PASSWORD=api
       - DATABASE_USER=api
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8090:8080"
+      - "9097:9464"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -243,12 +307,19 @@ services:
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     command: [sda-reencrypt]
     container_name: reencrypt
+    environment:
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     depends_on:
       credentials:
         condition: service_completed_successfully
     ports:
       - "50051:50051"
+      - "9098:9464"
     restart: always
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -269,14 +340,18 @@ services:
         condition: service_started
       mock-aai:
         condition: service_healthy
-      minio:
+      s3:
         condition: service_healthy
     environment:
       - CONFIG_FILE=/config.yaml
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     ports:
       - "8085:8080"
+      - "9100:9464"
     restart: always
     volumes:
       - ./sda/download-config-s3.yaml:/config.yaml
@@ -296,11 +371,18 @@ services:
     environment:
       - BROKER_PASSWORD=rotatekey
       - BROKER_USER=rotatekey
-      - BROKER_QUEUE=rotatekey
-      - BROKER_ROUTINGKEY=rotatekey
+      - SOURCE_QUEUE=rotatekey
+      - ROUTING_KEY=archived
       - DATABASE_PASSWORD=rotatekey
       - DATABASE_USER=rotatekey
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     restart: always
+    ports:
+      - "9099:9464"
+    extra_hosts:
+      - "localhost:host-gateway"
     volumes:
       - ./sda/config.yaml:/config.yaml
       - shared:/shared
@@ -315,7 +397,7 @@ services:
     environment:
       - CEGA_USERS_PASSWORD=test
       - CEGA_USERS_USER=test
-    image: "egarchive/lega-base:release.v0.2.0"
+    image: ghcr.io/neicnordic/sda-ci-mirror:egarchive-lega-base-release.v0.2.0
     ports:
       - "8443:8443"
     volumes:
@@ -339,6 +421,9 @@ services:
       - OIDC_SECRET=wHPVQaYXmdDHa
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
@@ -361,11 +446,41 @@ services:
       - AUTH_RESIGNJWT=false
       - DATABASE_PASSWORD=auth
       - DATABASE_USER=auth
+      - OTEL_TRACES_EXPORTER=otlp
+      - OTEL_METRICS_EXPORTER=prometheus
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
     extra_hosts:
       - "localhost:host-gateway"
     image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
     ports:
       - "8801:8080"
+      - "9101:9464"
+    restart: always
+    volumes:
+      - ./sda/config.yaml:/config.yaml
+      - shared:/shared
+
+  # Same service as auth-aai, but requiring an authentication context, so that
+  # the acr tests cannot disturb an ordinary OIDC login against auth-aai.
+  auth-aai-mfa:
+    command: [sda-auth]
+    container_name: auth-aai-mfa
+    depends_on:
+      credentials:
+        condition: service_completed_successfully
+      mock-aai:
+        condition: service_started
+    environment:
+      - AUTH_RESIGNJWT=false
+      - DATABASE_PASSWORD=auth
+      - DATABASE_USER=auth
+      - OIDC_ACRVALUES=https://refeds.org/profile/mfa
+      - OIDC_REDIRECTURL=http://localhost:8802/oidc/login
+    extra_hosts:
+      - "localhost:host-gateway"
+    image: ghcr.io/neicnordic/sensitive-data-archive:PR${PR_NUMBER}
+    ports:
+      - "8802:8080"
     restart: always
     volumes:
       - ./sda/config.yaml:/config.yaml
@@ -405,7 +520,7 @@ services:
       interval: 10s
       timeout: 2s
       retries: 6
-    image: mysql/mysql-server:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:mysql-mysql-server-8.0.32-1.2.11-server
     volumes:
       - ./sda/aai-mock/aai-mock.sql:/docker-entrypoint-initdb.d/1.sql
 
@@ -419,6 +534,8 @@ services:
       auth-cega:
         condition: service_started
       auth-aai:
+        condition: service_started
+      auth-aai-mfa:
         condition: service_started
       cega-nss:
         condition: service_started
@@ -447,7 +564,7 @@ services:
     environment:
       - PGPASSWORD=rootpasswd
       - STORAGETYPE=s3
-    image: python:3.13-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     profiles:
       - tests
     volumes:
@@ -455,10 +572,10 @@ services:
       - ./tests:/tests
 
 volumes:
-  minio_data:
   postgres_data:
   rabbitmq_data:
   shared:
+  grafana-storage:
 
 networks:
   default:

@@ -23,7 +23,7 @@ RETURNING id;`
 }
 
 func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fileID string, downloadPath *string) error {
-	stmt, err := db.getPreparedStmt(tx, mapFileToDatasetQuery)
+	mapFileToDatasetStmt, err := db.getPreparedStmt(tx, mapFileToDatasetQuery)
 	if err != nil {
 		return err
 	}
@@ -36,11 +36,11 @@ func (db *pgDb) mapFileToDataset(ctx context.Context, tx *sql.Tx, datasetID, fil
 	var dbDatasetID string
 
 	if err := insertDatasetStmt.QueryRowContext(ctx, datasetID).Scan(&dbDatasetID); err != nil {
-		return err
+		return parsePQError(err)
 	}
 
-	if _, err := stmt.ExecContext(ctx, fileID, dbDatasetID, downloadPath); err != nil {
-		return err
+	if _, err := mapFileToDatasetStmt.ExecContext(ctx, fileID, dbDatasetID, downloadPath); err != nil {
+		return parsePQError(err)
 	}
 
 	return nil

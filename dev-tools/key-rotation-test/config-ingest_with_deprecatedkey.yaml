@@ -21,6 +21,7 @@ server:
   cert: ""
   key: ""
   jwtpubkeyurl: "http://mockauth:8000/jwks"   # Point to the compose service URL
+  jwt_pub_key_url: "http://mockauth:8000/jwks"   # Point to the compose service URL
 
 # --- COMBINED S3 STORAGE TOPOLOGY ---
 storage:
@@ -68,9 +69,11 @@ s3inbox:
   secret_key: "secretKey"
   bucket: "inbox"
   region: "us-east-1"
-  ready_path: "/minio/health/ready"
 
 # --- NETWORK & IPC ---
+reencrypt:
+  target: "reencrypt:50051"
+
 grpc:
   host: "reencrypt"
   port: 50051
@@ -83,7 +86,6 @@ broker:
   password: ""   # Leave empty or set if using a custom rabbitmq definition
   vhost: "/sda"
   exchange: "sda"
-  routingKey: ""
   ssl: "false"
 
 # --- PERSISTENCE ---
@@ -105,12 +107,15 @@ db:
 schema:
   type: "isolated"
 
+schema_type: "isolated"
+
 # --- MULTI-KEY / CRYPT4GH SETTINGS FOR ROTATION ---
+target_public_key: /shared/rotatekey.pub.pem
+
 c4gh:
   filePath: /shared/c4gh.sec.pem
   passphrase: "c4ghpass"
   syncPubKeyPath: /shared/sync.pub.pem
-  rotatePubKeyPath: /shared/rotatekey.pub.pem
 
   privateKeys:
     - filePath: /shared/c4gh.sec.pem

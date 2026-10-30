@@ -17,7 +17,7 @@ docker compose -f .github/integration/sda-download-v2-integration.yml run integr
 
 This runs a minimal environment with:
 - PostgreSQL (with seeded test data)
-- MinIO (S3 storage)
+- Ceph RGW (S3 storage)
 - Mock OIDC provider
 - Reencrypt gRPC service
 - Download service
@@ -77,7 +77,7 @@ Services available:
 | Service    | Port                    | Description              |
 | ---------- | ----------------------- | ------------------------ |
 | PostgreSQL | 15432                   | Database                 |
-| MinIO (S3) | 19000 (API), 19001 (UI) | Object storage           |
+| S3 (Ceph)  | 19000                   | Object storage           |
 | RabbitMQ   | 5672, 15672             | Message broker           |
 | ls-aai-mock| 8800                    | OIDC/JWKS provider       |
 | auth-aai   | 8801                    | Auth service with login  |
@@ -248,12 +248,18 @@ JOIN sda.files f ON fd.file_id = f.id
 WHERE f.submission_user = 'test_dummy.org';
 ```
 
-## MinIO Console
+## S3 Storage
 
-Access MinIO at http://localhost:19001 with:
+The S3 backend is a single-container Ceph RGW on http://localhost:19000.
+It has no web console; use any S3 client with:
 
-- Username: `access`
-- Password: `secretKey`
+- Access key: `access`
+- Secret key: `secretKey`
+
+```bash
+s3cmd --access_key=access --secret_key=secretKey --host=localhost:19000 \
+  --host-bucket=localhost:19000 --no-ssl ls
+```
 
 ## Cleanup
 

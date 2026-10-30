@@ -689,6 +689,11 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	err = ts.db.SetAccessionID(context.Background(), "accessionID-disabled", disabledFileID)
 	assert.NoError(ts.T(), err, "failed to set accession id for disabled file")
 
+	removedFileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", fmt.Sprintf("%v/submission_b/TestGetUserFiles-removed.c4gh", testUser), testUser)
+	assert.NoError(ts.T(), err, "failed to register removed file in database")
+	err = ts.db.UpdateFileEventLog(context.Background(), removedFileID, "removed", "api", "{}", "{}")
+	assert.NoError(ts.T(), err, "failed to set file as removed in database")
+
 	filelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), "unknownuser", "", true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get (empty) file list of unknown user")
 	assert.Empty(ts.T(), filelist, "file list of unknown user is not empty")
@@ -696,17 +701,25 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 
 	filelist, _, err = ts.db.GetUserFiles(context.Background(), testUser, "", true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get file list")
-	assert.Equal(ts.T(), testCases, len(filelist), "file list is of incorrect length")
+	assert.Equal(ts.T(), testCases+1, len(filelist), "file list is of incorrect length")
 
+	foundDisabled := false
 	for _, fileInfo := range filelist {
+		assert.NotEqual(ts.T(), removedFileID, fileInfo.FileID, "removed files should not be returned")
+		if fileInfo.FileID == disabledFileID {
+			foundDisabled = true
+			assert.Equal(ts.T(), "disabled", fileInfo.Status, "incorrect file status")
+
+			continue
+		}
 		assert.Equal(ts.T(), "ready", fileInfo.Status, "incorrect file status")
 		assert.Contains(ts.T(), fileInfo.AccessionID, "accessionID-00", "incorrect file accession ID")
-		assert.NotEqual(ts.T(), disabledFileID, fileInfo.FileID, "disabled files should not be returned")
 	}
+	assert.True(ts.T(), foundDisabled, "disabled file should be returned")
 
 	filteredFilelist, nextCursor, err := ts.db.GetUserFiles(context.Background(), testUser, fmt.Sprintf("%s/submission_b", testUser), true, 0, "")
 	assert.NoError(ts.T(), err, "failed to get file list")
-	assert.Equal(ts.T(), 3, len(filteredFilelist), "file list is of incorrect length")
+	assert.Equal(ts.T(), 4, len(filteredFilelist), "file list is of incorrect length")
 	assert.Equal(ts.T(), "", nextCursor)
 
 	// Verify keyset pagination: use a page size smaller than the total to force multiple pages.
@@ -732,7 +745,7 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 		}
 	}
 
-	assert.Equal(ts.T(), testCases, len(seen), "pagination did not return all files without duplicates")
+	assert.Equal(ts.T(), testCases+1, len(seen), "pagination did not return all files without duplicates")
 
 	// An invalid cursor must return ErrInvalidCursor.
 	_, _, err = ts.db.GetUserFiles(context.Background(), testUser, "", true, pageLimit, "not-a-valid-cursor!!!")
@@ -741,6 +754,48 @@ func (ts *DatabaseTests) TestGetUserFiles() {
 	// "Zm9v" is base64url("foo"), which is valid base64 but not a UUID.
 	_, _, err = ts.db.GetUserFiles(context.Background(), testUser, "", true, pageLimit, "Zm9v")
 	assert.ErrorIs(ts.T(), err, database.ErrInvalidCursor, "expected ErrInvalidCursor for valid-base64 non-UUID cursor")
+}
+
+func (ts *DatabaseTests) TestGetUserFiles_PathPrefix() {
+	testUser := "GetFilesPrefixUser"
+	paths := []string{
+		"run_1/a.c4gh",
+		"runX1/b.c4gh",
+		"run_10/c.c4gh",
+		"run/d.c4gh",
+		"Run_1/e.c4gh",
+		"datä/f.c4gh",
+		"data/g.c4gh",
+	}
+	for _, p := range paths {
+		fileID, err := ts.db.RegisterFile(context.Background(), nil, "/inbox", p, testUser)
+		assert.NoError(ts.T(), err, "failed to register file in database")
+		err = ts.db.UpdateFileEventLog(context.Background(), fileID, "uploaded", testUser, "{}", "{}")
+		assert.NoError(ts.T(), err, "failed to update status of file in database")
+	}
+
+	for _, tc := range []struct {
+		prefix string
+		want   []string
+	}{
+		{prefix: "", want: paths},
+		// '_' is matched literally, not as a wildcard, and the match is case sensitive
+		{prefix: "run_1", want: []string{"run_1/a.c4gh", "run_10/c.c4gh"}},
+		{prefix: "run_1/", want: []string{"run_1/a.c4gh"}},
+		{prefix: "run", want: []string{"run_1/a.c4gh", "runX1/b.c4gh", "run_10/c.c4gh", "run/d.c4gh"}},
+		// a multibyte prefix must not be cut on a byte count
+		{prefix: "datä", want: []string{"datä/f.c4gh"}},
+		{prefix: "data/g.c4gh", want: []string{"data/g.c4gh"}},
+		{prefix: "data/g.c4gh/", want: nil},
+	} {
+		files, _, err := ts.db.GetUserFiles(context.Background(), testUser, tc.prefix, true, 0, "")
+		assert.NoError(ts.T(), err, "failed to get file list for prefix %q", tc.prefix)
+		got := make([]string, 0, len(files))
+		for _, f := range files {
+			got = append(got, f.InboxPath)
+		}
+		assert.ElementsMatch(ts.T(), tc.want, got, "unexpected files for prefix %q", tc.prefix)
+	}
 }
 
 func (ts *DatabaseTests) TestGetCorrID_sameFilePath() {
@@ -949,14 +1004,14 @@ func (ts *DatabaseTests) TestDeprecateKeyHashes() {
 
 func (ts *DatabaseTests) TestDeprecateKeyHashes_wrongHash() {
 	assert.NoError(ts.T(), ts.db.AddKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc11", "this is a another key"), "failed to register key in database")
-	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "wr0n6h4sh"), "key hash not found or already deprecated", "failure when deprecating non existing keyhash")
+	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "wr0n6h4sh"), sql.ErrNoRows.Error(), "failure when deprecating non existing keyhash")
 }
 
 func (ts *DatabaseTests) TestDeprecateKeyHashes_alreadyDeprecated() {
 	assert.NoError(ts.T(), ts.db.AddKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54", "this is a test key"), "failed to register key in database")
 	assert.NoError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "failure when deprecating keyhash")
 	// we should not be able to change the deprecation date
-	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), "key hash not found or already deprecated", "failure when deprecating keyhash")
+	assert.EqualError(ts.T(), ts.db.DeprecateKeyHash(context.Background(), "cbd8f5cc8d936ce437a52cd7991453839581fc69ee26e0daefde6a5d2660fc54"), sql.ErrNoRows.Error(), "failure when deprecating keyhash")
 }
 
 func (ts *DatabaseTests) TestSetKeyHash() {

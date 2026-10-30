@@ -54,11 +54,17 @@ curl -k -u guest:guest "http://rabbitmq:15672/api/exchanges/sda/sda/publish" \
     -H 'Content-Type: application/json;charset=UTF-8' \
     -d "$cancel_body" | jq
 
-# check database to verify file status
-if [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where file_id = '$CORRID' order by id DESC LIMIT 1")" != "disabled" ]; then
-    echo "canceling file failed"
-    exit 1
-fi
+# check database to verify file status, ingest handles the cancel message asynchronously
+RETRY_TIMES=0
+until [ "$(psql -U postgres -h postgres -d sda -At -c "select event from sda.file_event_log where file_id = '$CORRID' order by id DESC LIMIT 1")" = "disabled" ]; do
+    echo "waiting for the file to be cancelled"
+    RETRY_TIMES=$((RETRY_TIMES + 1))
+    if [ "$RETRY_TIMES" -eq 30 ]; then
+        echo "::error::Time out while waiting for the file to be cancelled"
+        exit 1
+    fi
+    sleep 2
+done
 
 
 # check database to verify file archive location and path has been unset

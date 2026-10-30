@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,15 +21,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
+	"github.com/lestrrat-go/jwx/v2/jwk"
+	s3inboxconf "github.com/neicnordic/sensitive-data-archive/cmd/s3inbox/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
-
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker"
-	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
-
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
 func main() {
@@ -44,35 +46,59 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	conf, err := config.NewConfig("s3inbox")
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-s3inbox")
 	if err != nil {
-		return fmt.Errorf("failed to load config due to: %v", err)
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(shutdownCtx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+		shutdownCancel()
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	s3InboxConf := s3InboxConfig{
+		endpoint:  s3inboxconf.S3InboxEndpoint(),
+		accessKey: s3inboxconf.S3InboxAccessKey(),
+		secretKey: s3inboxconf.S3InboxSecretKey(),
+		bucket:    s3inboxconf.S3InboxBucket(),
+		region:    s3inboxconf.S3InboxRegion(),
+		caCert:    s3inboxconf.S3InboxCaCert(),
+		readyPath: s3inboxconf.S3InboxReadyPath(),
 	}
 
-	tlsProxy, err := configTLS(conf.S3Inbox)
+	tlsProxy, err := configTLS(s3InboxConf)
 	if err != nil {
 		return fmt.Errorf("failed to setup tls config due to: %v", err)
 	}
 
-	db, err := postgres.NewPostgresSQLDatabase()
+	db, err := postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db due to: %v", err)
 	}
-	defer db.Close()
-	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
-		return errors.Join(errors.New("database schema v23 is required"), err)
+	defer func() {
+		if err := db.Close(); err != nil {
+			slog.Error("failed to close database", slog.Any("error", err))
+		}
+	}()
+	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 26 {
+		return errors.Join(errors.New("database schema v26 is required"), err)
 	}
 
-	s3Client, err := newS3Client(ctx, conf.S3Inbox)
+	s3Client, err := newS3Client(ctx, s3InboxConf)
 	if err != nil {
 		return fmt.Errorf("failed to initialize new S3 client due to: %v", err)
 	}
 
-	if err = checkS3Bucket(ctx, s3Client, conf.S3Inbox.Bucket); err != nil {
+	if err = checkS3Bucket(ctx, s3Client, s3inboxconf.S3InboxBucket(), s3inboxconf.S3InboxRegion()); err != nil {
 		return fmt.Errorf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
-	mqBroker, err := broker.NewMQ(conf.Broker)
+	mqBroker, err := rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize broker due to: %v", err)
 	}
@@ -80,35 +106,37 @@ func run() error {
 		if mqBroker == nil {
 			return
 		}
-		if mqBroker.Channel != nil {
-			if err := mqBroker.Channel.Close(); err != nil {
-				log.Errorf("failed to close mq broker channel due to: %v", err)
-			}
-		}
-		if mqBroker.Connection != nil {
-			if err := mqBroker.Connection.Close(); err != nil {
-				log.Errorf("failed to close mq broker connection due to: %v", err)
-			}
+
+		if err := mqBroker.Close(); err != nil {
+			slog.Error("failed to close broker", "error", err)
 		}
 	}()
 
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
+
 	// Load keys for JWT verification
-	if conf.Server.Jwtpubkeyurl != "" {
-		if err := auth.FetchJwtPubKeyURL(conf.Server.Jwtpubkeyurl); err != nil {
-			return fmt.Errorf("failed to read jwt pub key from url: %s, due to %v", conf.Server.Jwtpubkeyurl, err)
+	jwtPubKeyURL := s3inboxconf.ServerJwtPubKeyURL()
+	jwtPubKeyPath := s3inboxconf.ServerJwtPubKeyPath()
+	if jwtPubKeyURL == "" && jwtPubKeyPath == "" {
+		return errors.New("no JWT public key url or JWT public key path specified")
+	}
+	if jwtPubKeyURL != "" {
+		if err := auth.FetchJwtPubKeyURL(ctx, jwtPubKeyURL); err != nil {
+			return fmt.Errorf("failed to read jwt pub key from url: %s, due to %v", jwtPubKeyURL, err)
 		}
 	}
-	if conf.Server.Jwtpubkeypath != "" {
-		if err := auth.ReadJwtPubKeyPath(conf.Server.Jwtpubkeypath); err != nil {
-			return fmt.Errorf("failed to read jwt pub key from path: %s, due to %v", conf.Server.Jwtpubkeypath, err)
+	if jwtPubKeyPath != "" {
+		if err := auth.ReadJwtPubKeyPath(jwtPubKeyPath); err != nil {
+			return fmt.Errorf("failed to read jwt pub key from path: %s, due to %v", jwtPubKeyPath, err)
 		}
 	}
+
 	router := mux.NewRouter()
-	proxy := NewProxy(conf.S3Inbox, s3Client, auth, mqBroker, db, tlsProxy)
+	proxy := newProxy(s3InboxConf, s3Client, auth, mqBroker, db, tlsProxy, s3inboxconf.RoutingKey())
 	router.HandleFunc("/", proxy.CheckHealth).Methods("HEAD")
 	router.HandleFunc("/health", proxy.CheckHealth)
 	router.PathPrefix("/").Handler(proxy)
+	router.Use(otelmux.Middleware("sda-s3inbox"))
 
 	server := &http.Server{
 		Addr:              ":8000",
@@ -121,18 +149,23 @@ func run() error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		if conf.Server.Cert != "" && conf.Server.Key != "" {
-			if err := server.ListenAndServeTLS(conf.Server.Cert, conf.Server.Key); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		serverCert := s3inboxconf.ServerCert()
+		serverKey := s3inboxconf.ServerKey()
+		if serverCert != "" && serverKey != "" {
+			slog.Info("starting https server")
+			if err := server.ListenAndServeTLS(serverCert, serverKey); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start https server, due to: %v", err)
 			}
 		} else {
+			slog.Info("starting http server")
 			if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 				serverErr <- fmt.Errorf("failed to start http server, due to: %v", err)
 			}
 		}
 	}()
 	defer func() {
-		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(ctx, 10*time.Second)
+		// Use context.WithoutCancel to ensure server shutdown is not immediately cut off incase parent context is cancelled
+		serverShutdownCtx, serverShutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		if err := server.Shutdown(serverShutdownCtx); err != nil {
 			log.Errorf("failed to close http/https server due to: %v", err)
 		}
@@ -141,6 +174,7 @@ func run() error {
 
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	startupSpan.End()
 
 	select {
 	case <-sigc:
@@ -150,27 +184,35 @@ func run() error {
 	}
 }
 
-func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket string) error {
-	_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket})
-	if err != nil {
-		var apiErr smithy.APIError
-		if errors.As(err, &apiErr) {
-			var bae *types.BucketAlreadyExists
-			var baoby *types.BucketAlreadyOwnedByYou
-			if errors.As(err, &bae) || errors.As(err, &baoby) {
+func checkS3Bucket(ctx context.Context, s3Client *s3.Client, bucket, region string) error {
+	_, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{Bucket: &bucket})
+	if err != nil { //nolint nestif
+		var apiError smithy.APIError
+		if errors.As(err, &apiError) {
+			switch apiError.(type) {
+			case *types.NotFound:
+				_, err := s3Client.CreateBucket(ctx, &s3.CreateBucketInput{Bucket: &bucket,
+					CreateBucketConfiguration: &types.CreateBucketConfiguration{
+						LocationConstraint: types.BucketLocationConstraint(region),
+					},
+				})
+				if err != nil {
+					return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
+				}
+			case *types.BucketAlreadyExists:
 				return nil
+			case *types.BucketAlreadyOwnedByYou:
+				return nil
+			default:
+				return fmt.Errorf("either you don't have access to bucket %v or another error occurred: %v", &bucket, err)
 			}
-
-			return fmt.Errorf("unexpected issue while creating bucket: %s", err.Error())
 		}
-
-		return fmt.Errorf("verifying bucket failed, check S3 configuration: %v", err)
 	}
 
 	return nil
 }
 
-func configTLS(c config.S3InboxConf) (*tls.Config, error) {
+func configTLS(c s3InboxConfig) (*tls.Config, error) {
 	cfg := new(tls.Config)
 
 	// Read system CAs
@@ -182,10 +224,10 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 
 	cfg.RootCAs = systemCAs
 
-	if c.CaCert != "" {
-		caCert, e := os.ReadFile(c.CaCert) // #nosec G703 -- file path controlled by configuration
+	if c.caCert != "" {
+		caCert, e := os.ReadFile(c.caCert) // #nosec G703 -- file path controlled by configuration
 		if e != nil {
-			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", c.CaCert, e)
+			return nil, fmt.Errorf("failed to append %q to RootCAs: %v", c.caCert, e)
 		}
 		if ok := cfg.RootCAs.AppendCertsFromPEM(caCert); !ok {
 			log.Debug("no certs appended, using system certs only")
@@ -195,7 +237,7 @@ func configTLS(c config.S3InboxConf) (*tls.Config, error) {
 	return cfg, nil
 }
 
-func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, error) {
+func newS3Client(ctx context.Context, conf s3InboxConfig) (*s3.Client, error) {
 	tlsConfig, err := configTLS(conf)
 	if err != nil {
 		return nil, err
@@ -203,7 +245,7 @@ func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, erro
 
 	s3cfg, err := s3config.LoadDefaultConfig(
 		ctx,
-		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.AccessKey, conf.SecretKey, "")),
+		s3config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(conf.accessKey, conf.secretKey, "")),
 		s3config.WithHTTPClient(&http.Client{Transport: &http.Transport{TLSClientConfig: tlsConfig, ForceAttemptHTTP2: true}}),
 	)
 	if err != nil {
@@ -213,12 +255,13 @@ func newS3Client(ctx context.Context, conf config.S3InboxConf) (*s3.Client, erro
 	s3Client := s3.NewFromConfig(
 		s3cfg,
 		func(o *s3.Options) {
-			o.BaseEndpoint = aws.String(conf.Endpoint)
-			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.Endpoint, "http:")
-			o.Region = conf.Region
+			o.BaseEndpoint = aws.String(conf.endpoint)
+			o.EndpointOptions.DisableHTTPS = strings.HasPrefix(conf.endpoint, "http:")
+			o.Region = conf.region
 			o.UsePathStyle = true
 			o.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 			o.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+			otelaws.AppendMiddlewares(&o.APIOptions)
 		},
 	)
 

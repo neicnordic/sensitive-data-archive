@@ -6,7 +6,7 @@ services:
     container_name: certfixer
     environment:
       - KEYSTORE_PASSWORD=testingthis
-    image: alpine:latest
+    image: ghcr.io/neicnordic/sda-ci-mirror:alpine-3.24.2
     volumes:
       - ./scripts:/scripts
       - certs:/certs
@@ -30,7 +30,7 @@ services:
       - PGSSLROOTCERT=/certs/ca.crt
       - PGSSLCERT=/certs/client.crt
       - PGSSLKEY=/certs/client.key
-    image: python:3.11-slim
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     volumes:
       - ./scripts:/scripts
       - client_certs:/certs
@@ -77,7 +77,7 @@ services:
     environment:
       - CEGA_USERS_PASSWORD=test
       - CEGA_USERS_USER=test
-    image: "egarchive/lega-base:release.v0.2.0"
+    image: ghcr.io/neicnordic/sda-ci-mirror:egarchive-lega-base-release.v0.2.0
     ports:
       - "8443:8443"
     volumes:
@@ -161,7 +161,7 @@ services:
       - BROKER_HOST=rabbitmq
       - BROKER_PASSWORD=inbox
       - BROKER_PORT=5671
-      - BROKER_ROUTING_KEY=inbox
+      - ROUTING_KEY=inbox
       - BROKER_USERNAME=inbox
       - BROKER_VHOST=sda
       - CEGA_ENDPOINT=https://cega-nss:8443/username/%s
@@ -193,7 +193,7 @@ services:
       - PGSSLKEY=/certs/client.key
       - PGSSLMODE=verify-ca
       - STORAGETYPE=posix
-    image: python:3.13-slim-trixie
+    image: ghcr.io/neicnordic/sda-ci-mirror:python-3.14-slim-trixie
     profiles:
       - tests
     volumes:

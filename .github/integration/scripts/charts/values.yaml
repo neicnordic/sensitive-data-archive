@@ -45,7 +45,8 @@ global:
     url: PLACEHOLDER_VALUE
     port: 9000
     bucket: "inbox"
-    readyPath: "/minio/health/ready"
+    readyPath: ""
+    region: "default"
   auth:
     jwtSecret: jwk
     jwtAlg: ES256
@@ -111,8 +112,7 @@ global:
         port: 9000
         region: us-east-1
     remote:
-      host: "http://remote-sync"
-      port: "8080"
+      url: "http://remote-sync:8080/dataset"
       password: "pass"
       user: "user"
 api:

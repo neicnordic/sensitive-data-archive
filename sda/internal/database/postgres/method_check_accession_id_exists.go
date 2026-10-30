@@ -32,7 +32,7 @@ func (db *pgDb) checkAccessionIDExists(ctx context.Context, tx *sql.Tx, accessio
 
 	var same int
 	if err := sameIDStmt.QueryRowContext(ctx, accessionID, fileID).Scan(&same); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	if same > 0 {
@@ -41,7 +41,7 @@ func (db *pgDb) checkAccessionIDExists(ctx context.Context, tx *sql.Tx, accessio
 
 	var accessionIDCount int
 	if err := idExistsStmt.QueryRowContext(ctx, accessionID).Scan(&accessionIDCount); err != nil {
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	if accessionIDCount > 0 {

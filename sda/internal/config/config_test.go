@@ -144,22 +144,6 @@ func (ts *ConfigTestSuite) TestMissingRequiredConfVar() {
 	}
 }
 
-func (ts *ConfigTestSuite) TestConfigS3Storage() {
-	viper.Set("s3inbox.endpoint", "testurl")
-	viper.Set("s3inbox.access_key", "testaccess")
-	viper.Set("s3inbox.secret_key", "testsecret")
-	viper.Set("s3inbox.bucket", "testbucket")
-	viper.Set("s3inbox.region", "testregion")
-	config, err := NewConfig("s3inbox")
-	assert.NotNil(ts.T(), config)
-	assert.NoError(ts.T(), err)
-	assert.Equal(ts.T(), "testurl", config.S3Inbox.Endpoint)
-	assert.Equal(ts.T(), "testaccess", config.S3Inbox.AccessKey)
-	assert.Equal(ts.T(), "testsecret", config.S3Inbox.SecretKey)
-	assert.Equal(ts.T(), "testbucket", config.S3Inbox.Bucket)
-	assert.Equal(ts.T(), "testregion", config.S3Inbox.Region)
-}
-
 func (ts *ConfigTestSuite) TestConfigBroker() {
 	viper.Set("s3inbox.endpoint", "mock-value")
 	viper.Set("s3inbox.access_key", "mock-value")
@@ -610,8 +594,16 @@ func (ts *ConfigTestSuite) TestConfigAuth_OIDC() {
 
 	viper.Set("oidc.provider", "http://provider:9000")
 	viper.Set("oidc.redirectUrl", "http://auth/oidc/login")
-	_, err = NewConfig("auth")
+	c, err := NewConfig("auth")
 	assert.NoError(ts.T(), err, "unexpected failure")
+	assert.Empty(ts.T(), c.Auth.OIDC.AcrValues, "no authentication context should be required by default")
+
+	// acr values are space separated in the configuration, as in the OIDC
+	// acr_values request parameter they end up in.
+	viper.Set("oidc.acrValues", "https://refeds.org/profile/mfa https://example.org/loa3")
+	c, err = NewConfig("auth")
+	assert.NoError(ts.T(), err, "unexpected failure")
+	assert.Equal(ts.T(), []string{"https://refeds.org/profile/mfa", "https://example.org/loa3"}, c.Auth.OIDC.AcrValues)
 }
 
 func (ts *ConfigTestSuite) TestLoadInboxProjectConfig_readsNestedStorageInboxKeys() {

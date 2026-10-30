@@ -26,7 +26,7 @@ func (db *pgDb) getArchiveLocation(ctx context.Context, tx *sql.Tx, fileID strin
 			return "", nil
 		}
 
-		return "", err
+		return "", parsePQError(err)
 	}
 
 	return archiveLocation.String, nil

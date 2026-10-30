@@ -1,0 +1,67 @@
+name: Mirror CI images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/integration/mirror-images.txt
+      - .github/workflows/mirror_ci_images.yml
+  workflow_dispatch:
+
+concurrency:
+  group: mirror-ci-images
+  cancel-in-progress: false
+
+env:
+  MIRROR: ghcr.io/neicnordic/sda-ci-mirror
+  LIST: .github/integration/mirror-images.txt
+
+jobs:
+  mirror:
+    # workflow_dispatch can pick any branch, only main may publish
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Copy images to the mirror
+        run: |
+          set -euo pipefail
+          failed=()
+          while read -r source tag; do
+            case "$source" in ''|'#'*) continue ;; esac
+            case "$source" in *@sha256:*) ;; *) failed+=("$tag (no digest)"); continue ;; esac
+            # skip what is already mirrored, so a run only pulls new or changed images from Docker Hub
+            have=$(docker buildx imagetools inspect "$MIRROR:$tag" 2>/dev/null | awk '/^Digest:/{print $2}') || have=
+            [ "$have" = "${source#*@}" ] && continue
+            docker buildx imagetools create --prefer-index=false --tag "$MIRROR:$tag" "$source" ||
+              { sleep 10; docker buildx imagetools create --prefer-index=false --tag "$MIRROR:$tag" "$source"; } ||
+              failed+=("$tag")
+          done < "$LIST"
+          if [ "${#failed[@]}" -gt 0 ]; then
+            echo "::error::failed to mirror: ${failed[*]}"
+            exit 1
+          fi
+
+      - name: Verify mirror digests
+        run: |
+          set -euo pipefail
+          bad=()
+          while read -r source tag; do
+            case "$source" in ''|'#'*) continue ;; esac
+            got=$(docker buildx imagetools inspect "$MIRROR:$tag" | awk '/^Digest:/{print $2}') || got=
+            [ "$got" = "${source#*@}" ] || bad+=("$tag (got ${got:-none}, want ${source#*@})")
+          done < "$LIST"
+          if [ "${#bad[@]}" -gt 0 ]; then
+            printf '::error::digest mismatch: %s\n' "${bad[@]}"
+            exit 1
+          fi

@@ -17,15 +17,18 @@ import (
 	"github.com/casbin/casbin/v2/model"
 	"github.com/lestrrat-go/jwx/v2/jwk"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
+	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 )
 
@@ -44,6 +47,7 @@ type API struct {
 	inboxWriter storage.Writer
 	db          database.Database
 	mq          broker.Broker
+	auditLogger audit.Logger
 }
 
 func main() {
@@ -61,16 +65,35 @@ func run() error {
 		return fmt.Errorf("failed to load config: %v", err)
 	}
 
-	db, err := postgres.NewPostgresSQLDatabase()
+	shutdown, err := observability.SetupOTelSDK(ctx, "sda-api")
+	if err != nil {
+		return fmt.Errorf("failed to setup OTel SDK: %v", err)
+	}
+	defer func() {
+		otelShutdownCtx, otelShutdownCancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		if err := shutdown(otelShutdownCtx); err != nil {
+			slog.Error("failed to shutdown OTel SDK", "err", err)
+		}
+		otelShutdownCancel()
+	}()
+
+	ctx, startupSpan := observability.StartSpan(ctx, "start up")
+	defer startupSpan.End()
+
+	db, err := postgres.NewPostgresSQLDatabase(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize sda db, due to: %v", err)
 	}
-	defer db.Close()
+	defer func() {
+		if err := db.Close(); err != nil {
+			slog.Error("failed to close database", slog.Any("error", err))
+		}
+	}()
 	if dbSchemaVersion, err := db.SchemaVersion(); err != nil || dbSchemaVersion < 23 {
 		return errors.Join(errors.New("database schema v23 is required"), err)
 	}
 
-	mq, err := rabbitmq.NewRabbitMQBroker(context.Background())
+	mq, err := rabbitmq.NewRabbitMQBroker(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
@@ -94,7 +117,7 @@ func run() error {
 	auth := userauth.NewValidateFromToken(jwk.NewSet())
 
 	if jwtPubKeyURL != "" {
-		if err := auth.FetchJwtPubKeyURL(jwtPubKeyURL); err != nil {
+		if err := auth.FetchJwtPubKeyURL(ctx, jwtPubKeyURL); err != nil {
 			return fmt.Errorf("failed to read JWT public key URL, reason: %v", err)
 		}
 	}
@@ -128,7 +151,7 @@ func run() error {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithTransportCredentials(creds))
 
-	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), opts...)
+	conn, err := grpc.NewClient(apiconfig.GrpcAddr(), append(opts, grpc.WithStatsHandler(otelgrpc.NewClientHandler()))...)
 	if err != nil {
 		slog.Error("failed to connect to reencrypt service", "err", err)
 
@@ -136,7 +159,7 @@ func run() error {
 	}
 	defer conn.Close()
 
-	app := API{grpcClient: conn, auth: auth, enforcer: e, inboxReader: inboxReader, inboxWriter: inboxWriter, db: db, mq: mq}
+	app := API{grpcClient: conn, auth: auth, enforcer: e, inboxReader: inboxReader, inboxWriter: inboxWriter, db: db, mq: mq, auditLogger: audit.NewStdoutLogger()}
 
 	serverErr := make(chan error, 1)
 	addr := apiconfig.APIAddr()
@@ -171,6 +194,7 @@ func run() error {
 		serverShutdownCancel()
 	}()
 
+	startupSpan.End()
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, os.Interrupt, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 

@@ -1,6 +1,7 @@
 package postgres
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -81,7 +82,7 @@ func TestMain(m *testing.M) {
 	databaseURL := fmt.Sprintf("postgres://postgres:rootpasswd@%s/sda?sslmode=disable", dbHostAndPort)
 
 	pool.MaxWait = 120 * time.Second
-	if err = pool.Retry(func() error {
+	err = pool.Retry(func() error {
 		log.Println("waiting for docker postgres database to be ready")
 		db, err := sql.Open("postgres", databaseURL)
 		if err != nil {
@@ -93,7 +94,8 @@ func TestMain(m *testing.M) {
 		var dbVersion int
 
 		return db.QueryRow(query).Scan(&dbVersion)
-	}); err != nil {
+	})
+	if err != nil {
 		if err := pool.Purge(postgres); err != nil {
 			log.Fatalf("Could not purge resource: %s", err)
 		}
@@ -125,7 +127,7 @@ func (ts *DatabaseTests) SetupTest() {
 	}
 	var err error
 	// test working database connection
-	ts.db, err = NewPostgresSQLDatabase(
+	ts.db, err = NewPostgresSQLDatabase(context.Background(),
 		Host(dbConf.host),
 		Port(dbConf.port),
 		User(dbConf.user),
@@ -167,7 +169,7 @@ func (ts *DatabaseTests) TearDownTest() {
 // TestWrongPassword tests creation of new database connections with the wrong password
 func (ts *DatabaseTests) TestWrongPassword() {
 	// test wrong credentials
-	_, err := NewPostgresSQLDatabase(
+	_, err := NewPostgresSQLDatabase(context.Background(),
 		Host("localhost"),
 		Port(dbPort),
 		User("hacker"),
