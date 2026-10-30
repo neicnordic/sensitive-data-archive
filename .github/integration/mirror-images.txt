@@ -28,7 +28,7 @@ debian:stable-20261005-slim@sha256:eb593cf2c358cacef45ca0a424bbc7d30cfa3466265fc
 rabbitmq:3.11.11-management-alpine@sha256:2d4ba07bc38699e2715ea9a1faeb7812be53a7a4c16b8b42936a4e2f696e6238 rabbitmq-3.11.11-management-alpine
 egarchive/lega-base:release.v0.2.0@sha256:1710b8ef81fad68c9286ab61e2082607d0039526e5ce2e798ca7627710e94abd egarchive-lega-base-release.v0.2.0
 golang:1.25-alpine@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 golang-1.25-alpine
-maven:3.9.9-eclipse-temurin-21@sha256:3a4ab3276a087bf276f79cae96b1af04f53731bec53fb2e651aca79e4b10211e maven-3.9.9-eclipse-temurin-21
+maven:3.9.16-eclipse-temurin-25@sha256:93b8a14ea2f412782e4e842651273b4d903e35cc496284f178fbbe2d67d00976 maven-3.9.16-eclipse-temurin-25
 mysql/mysql-server:8.0.32-1.2.11-server@sha256:d6c8301b7834c5b9c2b733b10b7e630f441af7bc917c74dba379f24eeeb6a313 mysql-mysql-server-8.0.32-1.2.11-server
 postgres:15.4-alpine@sha256:35ce2187f2f7fb75e8e79493e13743596c21eb3789ff41ece145ae04d06e93a5 postgres-15.4-alpine
 python:3.14-slim-trixie@sha256:fbecd461fc72d21b2143c6eaba25143738079154a6d0ea3da3aec724f50eed4a python-3.14-slim-trixie
