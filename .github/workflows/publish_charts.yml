@@ -16,7 +16,7 @@ jobs:
     continue-on-error: true
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -29,6 +29,6 @@ jobs:
         uses: azure/setup-helm@v5
 
       - name: Run chart-releaser
-        uses: helm/chart-releaser-action@v1.7.0
+        uses: helm/chart-releaser-action@v1.8.0
         env:
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
