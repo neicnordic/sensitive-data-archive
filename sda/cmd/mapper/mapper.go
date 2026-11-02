@@ -88,8 +88,8 @@ func run() error {
 			slog.Error("failed to close database", slog.Any("error", err))
 		}
 	}()
-	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 28 {
-		return errors.Join(errors.New("database schema v28 is required"), err)
+	if dbSchemaVersion, err := app.db.SchemaVersion(); err != nil || dbSchemaVersion < 29 {
+		return errors.Join(errors.New("database schema v29 is required"), err)
 	}
 
 	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)

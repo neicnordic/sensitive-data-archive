@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Add new database func: `CheckIfFileInDataset` to check if a file accession id is associated with a dataset accession id
 - Add new database func: `RemoveFileFromDataset` to remove association between a file and a dataset
 - mapper: add handling of dataset file removal message
+  - Requires v29 of the postgres schema to start 
 - Add new dataset event type: `file_removed` to be used to indicate a file has been removed from a dataset
   - After a file removal the dataset should be released again to indicate that the desired modifications are complete and dataset should be available for download, etc again.
   - If dataset is already deprecated allow file removal but do not "undeprecate" dataset with a file_removed event  
