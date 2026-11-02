@@ -1095,7 +1095,6 @@ func TestRemoveFileFromDataset(t *testing.T) {
 		accessionID        string
 		newMocks           func() (*mocks.MockDatabase, *mocks.MockBroker)
 		expectedStatusCode int
-		expectedBody       string
 	}{
 		{
 			name:        "not_found",
@@ -1108,7 +1107,6 @@ func TestRemoveFileFromDataset(t *testing.T) {
 				return mockDB, &mocks.MockBroker{}
 			},
 			expectedStatusCode: http.StatusNotFound,
-			expectedBody:       fmt.Sprintf(`{"error": "%s"}`, http.StatusText(http.StatusNotFound)),
 		},
 		{
 			name:        "success",
@@ -1128,7 +1126,6 @@ func TestRemoveFileFromDataset(t *testing.T) {
 				return mockDB, mockBroker
 			},
 			expectedStatusCode: http.StatusAccepted,
-			expectedBody:       "{}",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
