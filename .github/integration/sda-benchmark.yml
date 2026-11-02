@@ -110,7 +110,7 @@ services:
       - BENCHMARK_MODE=${BENCHMARK_MODE:-endpoint-e2e}
       - VERIFY_PRIVATE_KEY_PATH=${VERIFY_PRIVATE_KEY_PATH:-/shared/c4gh.sec.pem}
       - VERIFY_PRIVATE_KEY_PASSPHRASE=${VERIFY_PRIVATE_KEY_PASSPHRASE:-c4ghpass}
-    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.27-alpine
     profiles:
       - benchmark
     volumes:

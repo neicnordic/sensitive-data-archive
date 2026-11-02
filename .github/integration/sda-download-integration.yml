@@ -245,7 +245,7 @@ services:
       - C4GH_PUBKEY_FILE=/shared/c4gh.pub.pem
     extra_hosts:
       - "localhost:host-gateway"
-    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.27-alpine
     profiles:
       - tests
     volumes:
