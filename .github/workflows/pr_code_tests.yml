@@ -10,8 +10,8 @@ on:
       - ".github/workflows/pr_code_tests.yml"
 
 env:
-  go-version: '1.25'
-  go-version-validator-orchestrator: '1.25'
+  go-version: '1.27'
+  go-version-validator-orchestrator: '1.27'
 
 jobs:
 
