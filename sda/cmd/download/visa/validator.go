@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -130,8 +130,7 @@ func (v *Validator) getPassport(rawToken string, authSource string) ([]string, e
 			return nil, fmt.Errorf("failed to parse token for visa claims: %w", err)
 		}
 
-		claims := token.PrivateClaims()
-		passportClaim, ok := claims["ga4gh_passport_v1"]
+		passportClaim, ok := token.Field("ga4gh_passport_v1")
 		if !ok {
 			return nil, nil
 		}
@@ -267,8 +266,8 @@ func (v *Validator) validateSingleVisa(ctx context.Context, identity Identity, v
 		return nil, zeroTime, errors.New("visa has no signatures")
 	}
 
-	jkuURL := sigs[0].ProtectedHeaders().JWKSetURL()
-	if jkuURL == "" {
+	jkuURL, ok := sigs[0].ProtectedHeaders().JWKSetURL()
+	if !ok {
 		return nil, zeroTime, errors.New("visa missing jku header")
 	}
 
@@ -278,8 +277,14 @@ func (v *Validator) validateSingleVisa(ctx context.Context, identity Identity, v
 		return nil, zeroTime, fmt.Errorf("failed to parse visa claims: %w", err)
 	}
 
-	visaIssuer := unverified.Issuer()
-	visaSubject := unverified.Subject()
+	visaIssuer, ok := unverified.Issuer()
+	if !ok {
+		return nil, zeroTime, errors.New("visa missing issuer")
+	}
+	visaSubject, ok := unverified.Subject()
+	if !ok {
+		return nil, zeroTime, errors.New("visa missing subject")
+	}
 
 	// Track identity for multi-identity detection
 	identityKey := visaIssuer + "\x00" + visaSubject
@@ -297,14 +302,24 @@ func (v *Validator) validateSingleVisa(ctx context.Context, identity Identity, v
 		jwt.WithAcceptableSkew(v.config.ClockSkew),
 		jwt.WithValidate(true),
 	)
-	if err != nil {
-		jwtAlg := sigs[0].ProtectedHeaders().Algorithm()
-		kid := sigs[0].ProtectedHeaders().KeyID()
+	if err != nil { // nolint:nestif
+		jwtAlg, ok := sigs[0].ProtectedHeaders().Algorithm()
+		if !ok {
+			return nil, zeroTime, fmt.Errorf("failed to get algorithm: %w", err)
+		}
+		kid, ok := sigs[0].ProtectedHeaders().KeyID()
+		if !ok {
+			return nil, zeroTime, fmt.Errorf("failed to get kry ID: %w", err)
+		}
 
 		var jwkAlgs []string
 		for i := 0; i < keySet.Len(); i++ {
 			if k, ok := keySet.Key(i); ok {
-				if a := k.Algorithm(); a != nil && a.String() != "" {
+				a, ok := k.Algorithm()
+				if !ok {
+					return nil, zeroTime, fmt.Errorf("failed to get algorithm: %w", err)
+				}
+				if a != nil && a.String() != "" {
 					jwkAlgs = append(jwkAlgs, a.String())
 				}
 			}
@@ -356,7 +371,9 @@ func (v *Validator) validateSingleVisa(ctx context.Context, identity Identity, v
 		return nil, zeroTime, nil
 	}
 
-	return []string{datasetID}, verified.Expiration(), nil
+	expireTime, _ := verified.Expiration()
+
+	return []string{datasetID}, expireTime, nil
 }
 
 // checkIdentityBinding enforces the configured identity binding mode.
@@ -385,8 +402,7 @@ func (v *Validator) checkIdentityBinding(identity Identity, visaIssuer, visaSubj
 
 // extractVisaClaim extracts and parses the ga4gh_visa_v1 claim from a validated token.
 func extractVisaClaim(token jwt.Token) (*VisaClaim, error) {
-	claims := token.PrivateClaims()
-	raw, ok := claims["ga4gh_visa_v1"]
+	raw, ok := token.Field("ga4gh_visa_v1")
 	if !ok {
 		return nil, errors.New("visa missing ga4gh_visa_v1 claim")
 	}

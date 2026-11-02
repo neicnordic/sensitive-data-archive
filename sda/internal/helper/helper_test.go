@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -62,7 +62,7 @@ func (ts *HelperTest) TestCreateRSAToken() {
 	set := jwk.NewSet()
 	keyData, err := os.ReadFile(filepath.Join(filepath.Clean(publicK), "/rsa.pub"))
 	assert.NoError(ts.T(), err)
-	key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+	key, err := jwk.ParseKey(keyData, jwk.WithX509(true))
 	assert.NoError(ts.T(), err)
 	err = jwk.AssignKeyID(key)
 	assert.NoError(ts.T(), err)
@@ -112,7 +112,7 @@ func (ts *HelperTest) TestCreateHSToken() {
 	assert.Nil(ts.T(), err)
 
 	set := jwk.NewSet()
-	jwtKey, err := jwk.FromRaw(key)
+	jwtKey, err := jwk.Import[jwk.Key](key)
 	assert.NoError(ts.T(), err)
 
 	err = jwk.AssignKeyID(jwtKey)

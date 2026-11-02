@@ -20,9 +20,10 @@ import (
 	"github.com/dgraph-io/ristretto"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/jwx-go/jwkfetch/v4"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/config"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
 	"github.com/neicnordic/sensitive-data-archive/internal/audit"
@@ -198,7 +199,7 @@ func (a *Authenticator) loadKeysFromPath(keyPath string) error {
 			return fmt.Errorf("failed to read key file %s: %w", path, err)
 		}
 
-		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+		key, err := jwk.ParseKey(keyData, jwk.WithX509(true))
 		if err != nil {
 			log.Warnf("failed to parse key from %s: %v (skipping)", path, err)
 
@@ -213,7 +214,8 @@ func (a *Authenticator) loadKeysFromPath(keyPath string) error {
 			return fmt.Errorf("failed to add key to set: %w", err)
 		}
 
-		log.Debugf("Loaded key with ID: %s", key.KeyID())
+		kid, _ := key.KeyID()
+		log.Debugf("Loaded key with ID: %s", kid)
 
 		return nil
 	})
@@ -231,7 +233,8 @@ func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
 	defer cancel()
 
 	// The fetcher ignores ctx for the HTTP request, so the client timeout is what bounds a stalled response.
-	keySet, err := jwk.Fetch(ctx, jwksURL, jwk.WithHTTPClient(&http.Client{Timeout: jwksFetchTimeout}))
+	client := jwkfetch.NewClient()
+	keySet, err := client.Fetch(ctx, jwksURL)
 	if err != nil {
 		return fmt.Errorf("failed to fetch JWKS: %w", err)
 	}
@@ -244,20 +247,19 @@ func (a *Authenticator) loadKeysFromURL(jwksURL string) error {
 	}
 
 	// Add all keys from the fetched keyset
-	for iter := keySet.Keys(context.Background()); iter.Next(context.Background()); {
-		key, ok := iter.Pair().Value.(jwk.Key)
-		if !ok {
-			log.Warn("unexpected key type in JWKS response, skipping")
+	it := keySet.All()
+	// for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
+	for _, v := range it {
+		keyID, ok := v.KeyID()
+		if !ok || keyID == "" {
+			if err := jwk.AssignKeyID(v); err != nil {
+				log.Warnf("AssignKeyID failed: %v", err)
 
-			continue
+				continue
+			}
 		}
-		if err := jwk.AssignKeyID(key); err != nil {
-			log.Warnf("failed to assign key ID: %v", err)
-
-			continue
-		}
-		if err := newSet.AddKey(key); err != nil {
-			log.Warnf("failed to add key: %v", err)
+		if err := newSet.AddKey(v); err != nil {
+			log.Warnf("failed to add key: %v", err.Error())
 
 			continue
 		}
@@ -295,7 +297,7 @@ func (a *Authenticator) refreshKeys() {
 // counts as unknown. Other failures (expiry, bad signature with a known kid)
 // return false.
 func hasUnknownKey(tokenStr string, err error, keys jwk.Set) bool {
-	if !errors.Is(err, errNoKeys) && !jws.IsVerificationError(err) {
+	if !errors.Is(err, errNoKeys) && !errors.Is(err, jws.VerificationError()) {
 		return false
 	}
 
@@ -303,7 +305,8 @@ func hasUnknownKey(tokenStr string, err error, keys jwk.Set) bool {
 	if parseErr != nil || len(msg.Signatures()) == 0 {
 		return false
 	}
-	_, found := keys.LookupKeyID(msg.Signatures()[0].ProtectedHeaders().KeyID())
+	kid, _ := msg.Signatures()[0].ProtectedHeaders().KeyID()
+	_, found := keys.LookupKeyID(kid)
 
 	return !found
 }
@@ -378,9 +381,18 @@ func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
 		return nil, err
 	}
 
+	tokenIssuer, ok := token.Issuer()
+	if !ok {
+		return nil, errors.New("bad issuer")
+	}
+	// Validate issuer is a valid URI
+	iss, err := url.ParseRequestURI(tokenIssuer)
+	if err != nil || iss.Hostname() == "" {
+		return nil, fmt.Errorf("invalid issuer in token: %v", tokenIssuer)
+	}
+
 	// Validate issuer if configured
 	if issuer := config.OIDCIssuer(); issuer != "" {
-		tokenIssuer := token.Issuer()
 		if tokenIssuer != issuer && tokenIssuer != strings.TrimSuffix(issuer, "/") {
 			return nil, fmt.Errorf("invalid issuer: got %s, expected %s", tokenIssuer, issuer)
 		}
@@ -388,7 +400,10 @@ func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
 
 	// Validate audience if configured
 	if audience := config.OIDCAudience(); audience != "" {
-		aud := token.Audience()
+		aud, ok := token.Audience()
+		if !ok {
+			return nil, errors.New("no audience in token")
+		}
 		found := false
 		for _, a := range aud {
 			if a == audience {
@@ -400,12 +415,6 @@ func (a *Authenticator) verifyJWT(tokenStr string) (jwt.Token, error) {
 		if !found {
 			return nil, errors.New("invalid audience")
 		}
-	}
-
-	// Validate issuer is a valid URI
-	iss, err := url.ParseRequestURI(token.Issuer())
-	if err != nil || iss.Hostname() == "" {
-		return nil, fmt.Errorf("invalid issuer in token: %v", token.Issuer())
 	}
 
 	return token, nil
@@ -440,9 +449,18 @@ func authenticateStructureBased(rawToken string, userinfoClient *visa.UserinfoCl
 			return nil, fmt.Errorf("jwt validation failed: %w", err)
 		}
 
+		iss, ok := token.Issuer()
+		if !ok {
+			return nil, errors.New("failed to extract issuer")
+		}
+		sub, ok := token.Subject()
+		if !ok {
+			return nil, errors.New("failed to extract issuer")
+		}
+
 		return &authResult{
-			Issuer:     token.Issuer(),
-			Subject:    token.Subject(),
+			Issuer:     iss,
+			Subject:    sub,
 			AuthSource: "jwt",
 			Token:      token,
 		}, nil
@@ -570,7 +588,7 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 
 		// Authenticate: structure-based if visa support is active, legacy otherwise
 		var authCtx AuthContext
-		if needsVisa || config.AuthAllowOpaque() {
+		if needsVisa || config.AuthAllowOpaque() { // nolint:nestif
 			result, authErr := authenticateStructureBased(rawToken, userinfoClient)
 			if authErr != nil {
 				log.Debugf("authentication failed: %v", authErr)
@@ -607,9 +625,24 @@ func TokenMiddleware(db DatasetLookup, visaValidator *visa.Validator, auditLogge
 
 				return
 			}
+
+			iss, ok := token.Issuer()
+			if !ok {
+				auditDenied(c, http.StatusUnauthorized)
+				c.Abort()
+
+				return
+			}
+			subj, ok := token.Subject()
+			if !ok {
+				auditDenied(c, http.StatusUnauthorized)
+				c.Abort()
+
+				return
+			}
 			authCtx = AuthContext{
-				Issuer:     token.Issuer(),
-				Subject:    token.Subject(),
+				Issuer:     iss,
+				Subject:    subj,
 				Token:      token,
 				AuthSource: "jwt",
 			}
@@ -825,7 +858,7 @@ func tokenExpiry(authCtx AuthContext) *time.Time {
 		return nil
 	}
 
-	exp := authCtx.Token.Expiration()
+	exp, _ := authCtx.Token.Expiration()
 	if exp.IsZero() {
 		return nil
 	}

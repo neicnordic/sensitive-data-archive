@@ -18,7 +18,7 @@ import (
 
 	"crypto/rand"
 
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 	"github.com/minio/minio-go/v6/pkg/signer"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/stretchr/testify/assert"
@@ -215,8 +215,9 @@ func (ts *UserAuthTest) TestUserTokenAuthenticator_ValidateSignature_RSA() {
 	signer.SignV4(*r, "username", "testpass", "", "us-east-1")
 	token, err := a.Authenticate(r)
 	assert.NoError(ts.T(), err)
-	privateClaims := token.PrivateClaims()
-	assert.Equal(ts.T(), privateClaims["pilot"], helper.DefaultTokenClaims["pilot"])
+	field, ok := token.Field("pilot")
+	assert.True(ts.T(), ok)
+	assert.Equal(ts.T(), field, helper.DefaultTokenClaims["pilot"])
 
 	// Create and test expired Elixir token
 	expiredToken, err := helper.CreateRSAToken(prKeyParsed, "RS256", helper.ExpiredClaims)

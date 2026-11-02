@@ -20,7 +20,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/google/uuid"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"

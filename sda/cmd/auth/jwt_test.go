@@ -9,9 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk/jwkbb"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
@@ -32,22 +33,22 @@ func (ts *JWTTests) SetupTest() {
 
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	assert.NoError(ts.T(), err)
-	ecKeyBytes, err := jwk.EncodePEM(ecKey)
+	ecKeyBytes, err := jwkbb.EncodePEM(ecKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/ec", ecKeyBytes, 0600))
 
-	ecPubKeyBytes, err := jwk.EncodePEM(&ecKey.PublicKey)
+	ecPubKeyBytes, err := jwkbb.EncodePEM(&ecKey.PublicKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/ec.pub", ecPubKeyBytes, 0600))
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	assert.NoError(ts.T(), err)
 
-	rsaKeyBytes, err := jwk.EncodePEM(rsaKey)
+	rsaKeyBytes, err := jwkbb.EncodePEM(rsaKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/rsa", rsaKeyBytes, 0600))
 
-	rsaPubKeyBytes, err := jwk.EncodePEM(&rsaKey.PublicKey)
+	rsaPubKeyBytes, err := jwkbb.EncodePEM(&rsaKey.PublicKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), os.WriteFile(ts.TempDir+"/rsa.pub", rsaPubKeyBytes, 0600))
 }
@@ -82,7 +83,7 @@ func (ts *JWTTests) TestGenerateJwtToken() {
 
 		keyData, err := os.ReadFile(test.Pubfile)
 		assert.NoError(ts.T(), err)
-		key, err := jwk.ParseKey(keyData, jwk.WithPEM(true))
+		key, err := jwk.ParseKey(keyData, jwk.WithX509(true))
 		assert.NoError(ts.T(), err)
 		assert.NoError(ts.T(), jwk.AssignKeyID(key))
 		keySet := jwk.NewSet()
@@ -90,8 +91,10 @@ func (ts *JWTTests) TestGenerateJwtToken() {
 
 		token, err := jwt.Parse([]byte(t), jwt.WithKeySet(keySet, jws.WithInferAlgorithmFromKey(true)), jwt.WithValidate(true))
 		assert.NoError(ts.T(), err)
-		assert.Equal(ts.T(), "http://local.issuer", token.Issuer())
-		assert.Equal(ts.T(), "test@foo.bar", token.Subject())
+		iss, _ := token.Issuer()
+		assert.Equal(ts.T(), "http://local.issuer", iss)
+		sub, _ := token.Subject()
+		assert.Equal(ts.T(), "test@foo.bar", sub)
 
 		// check that the expiration string is a date
 		_, err = time.Parse("2006-01-02 15:04:05", expiration)

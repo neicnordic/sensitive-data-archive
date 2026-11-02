@@ -22,7 +22,8 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/mux v1.8.1
-	github.com/lestrrat-go/jwx/v2 v2.1.7
+	github.com/jwx-go/jwkfetch/v4 v4.0.4
+	github.com/lestrrat-go/jwx/v4 v4.6.0
 	github.com/lib/pq v1.12.3
 	github.com/minio/minio-go/v6 v6.0.57
 	github.com/mocktools/go-smtp-mock v1.10.0
@@ -93,7 +94,6 @@ require (
 	github.com/cloudwego/base64x v0.1.7 // indirect
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/dchest/bcrypt_pbkdf v1.0.0 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/docker/cli v27.4.1+incompatible // indirect
 	github.com/docker/docker v27.1.1+incompatible // indirect
 	github.com/docker/go-connections v0.5.0 // indirect
@@ -121,10 +121,11 @@ require (
 	github.com/klauspost/cpuid/v2 v2.4.1 // indirect
 	github.com/leodido/go-urn v1.5.0 // indirect
 	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
+	github.com/lestrrat-go/dsig v1.4.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/httprc v1.0.6 // indirect
-	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/option v1.0.1 // indirect
+	github.com/lestrrat-go/httprc/v3 v3.0.6 // indirect
+	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
+	github.com/lestrrat-go/option/v3 v3.0.0-alpha1 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/minio/sha256-simd v1.0.1 // indirect
 	github.com/moby/docker-image-spec v1.3.1 // indirect
@@ -146,7 +147,6 @@ require (
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.64.1 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
-	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/stretchr/objx v0.8.0 // indirect

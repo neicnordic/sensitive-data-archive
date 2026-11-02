@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/dgraph-io/ristretto"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 	log "github.com/sirupsen/logrus"
 )
 

@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/jwx-go/jwkfetch/v4"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/oauth2"
@@ -198,18 +199,20 @@ func verifyAcr(acr string, required []string) error {
 
 // Validate raw (OIDC) jwt against public key from jwk. Return parsed jwt and its expiration date.
 func validateToken(rawJwt, jwksURL string) (*jwt.Token, string, error) {
-	set, err := jwk.Fetch(context.Background(), jwksURL)
+	client := jwkfetch.NewClient()
+	set, err := client.Fetch(context.Background(), jwksURL)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s", err.Error())
 	}
-	for it := set.Keys(context.Background()); it.Next(context.Background()); {
-		pair := it.Pair()
-		key := pair.Value.(jwk.Key)
-		if err := jwk.AssignKeyID(key); err != nil {
-			return nil, "", fmt.Errorf("AssignKeyID failed: %v", err)
+	it := set.All()
+	for _, v := range it {
+		keyID, ok := v.KeyID()
+		if !ok || keyID == "" {
+			if err := jwk.AssignKeyID(v); err != nil {
+				return nil, "", fmt.Errorf("AssignKeyID failed: %v", err)
+			}
 		}
 	}
-
 	token, err := jwt.Parse(
 		[]byte(rawJwt),
 		jwt.WithKeySet(set, jws.WithInferAlgorithmFromKey(true)),
@@ -220,5 +223,10 @@ func validateToken(rawJwt, jwksURL string) (*jwt.Token, string, error) {
 		return nil, "", fmt.Errorf("signed token not valid: %s, (token was %s)", err.Error(), rawJwt)
 	}
 
-	return &token, token.Expiration().Format("2006-01-02 15:04:05"), err
+	exp, ok := token.Expiration()
+	if !ok {
+		return nil, "", errors.New("failed to get expiration from token")
+	}
+
+	return &token, exp.Format("2006-01-02 15:04:05"), err
 }

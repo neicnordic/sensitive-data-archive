@@ -10,9 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/jwx-go/jwkfetch/v4"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -53,9 +54,14 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 			return nil, err
 		}
 
-		iss, err := url.ParseRequestURI(token.Issuer())
+		issuer, ok := token.Issuer()
+		if !ok {
+			return nil, errors.New("failed to get issuer from token")
+		}
+
+		iss, err := url.ParseRequestURI(issuer)
 		if err != nil || iss.Hostname() == "" {
-			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
+			return nil, fmt.Errorf("failed to parse issuer hostname from token (%v)", iss)
 		}
 
 		return token, nil
@@ -71,9 +77,14 @@ func (u *ValidateFromToken) Authenticate(r *http.Request) (jwt.Token, error) {
 			return nil, fmt.Errorf("signed token not valid: %w", err)
 		}
 
-		iss, err := url.ParseRequestURI(token.Issuer())
+		issuer, ok := token.Issuer()
+		if !ok {
+			return nil, errors.New("failed to get issuer from token")
+		}
+
+		iss, err := url.ParseRequestURI(issuer)
 		if err != nil || iss.Hostname() == "" {
-			return nil, fmt.Errorf("failed to get issuer from token (%v)", iss)
+			return nil, fmt.Errorf("failed to get issuer hostname from token (%v)", iss)
 		}
 
 		return token, nil
@@ -113,7 +124,7 @@ func (u *ValidateFromToken) ReadJwtPubKeyPath(jwtpubkeypath string) error {
 }
 
 func (u *ValidateFromToken) ReadJwtPubKeyBytes(pubKeyBytes []byte) error {
-	key, err := jwk.ParseKey(pubKeyBytes, jwk.WithPEM(true))
+	key, err := jwk.ParseKey(pubKeyBytes, jwk.WithX509(true))
 	if err != nil {
 		return fmt.Errorf("failed to parse JWT public key, reason: %v", err)
 	}
@@ -143,16 +154,20 @@ func (u *ValidateFromToken) FetchJwtPubKeyURL(ctx context.Context, jwtpubkeyurl 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	u.Keyset, err = jwk.Fetch(ctx, jwtpubkeyurl)
+	client := jwkfetch.NewClient()
+	u.Keyset, err = client.Fetch(ctx, jwtpubkeyurl)
 	if err != nil {
 		return fmt.Errorf("jwk.Fetch failed (%v) for %s", err, jwtpubkeyurl)
 	}
 
-	for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
-		pair := it.Pair()
-		key := pair.Value.(jwk.Key)
-		if err := jwk.AssignKeyID(key); err != nil {
-			return fmt.Errorf("AssignKeyID failed: %v", err)
+	it := u.Keyset.All()
+	// for it := u.Keyset.Keys(context.Background()); it.Next(context.Background()); {
+	for _, v := range it {
+		keyID, ok := v.KeyID()
+		if !ok || keyID == "" {
+			if err := jwk.AssignKeyID(v); err != nil {
+				return fmt.Errorf("AssignKeyID failed: %v", err)
+			}
 		}
 	}
 

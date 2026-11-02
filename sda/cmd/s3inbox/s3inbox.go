@@ -21,7 +21,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/gorilla/mux"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 	s3inboxconf "github.com/neicnordic/sensitive-data-archive/cmd/s3inbox/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
 	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
