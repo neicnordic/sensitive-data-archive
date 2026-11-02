@@ -932,14 +932,12 @@ func (api *API) setAccession(w http.ResponseWriter, r *http.Request) {
 func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 	datasetID := r.PathValue("datasetid")
 
-	ctx, span := observability.StartSpan(r.Context(), "listDatasetFiles", attribute.String("dataset-id", datasetID))
+	ctx, span := observability.StartSpan(r.Context(), "listDatasetFiles", attribute.String("dataset_id", datasetID))
 	defer span.End()
 
 	if datasetID == "" {
 		span.Warn("missing dataset id in request")
-		writeJSON(w, http.StatusBadRequest, ErrorResponse{
-			Error: http.StatusText(http.StatusBadRequest),
-		})
+		w.WriteHeader(http.StatusBadRequest)
 
 		return
 	}
@@ -947,7 +945,7 @@ func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 	// parse optional pagination params
 	limit, err := parseLimitParam(r.URL.Query().Get("limit"))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, "invalid limit")
+		w.WriteHeader(http.StatusBadRequest)
 
 		return
 	}
@@ -955,16 +953,14 @@ func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 	datasetExists, err := api.db.CheckIfDatasetExists(ctx, datasetID)
 	if err != nil {
 		span.Error("failed to check dataset exists", err)
-		writeJSON(w, http.StatusInternalServerError, ErrorResponse{
-			Error: http.StatusText(http.StatusInternalServerError),
-		})
+		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
 
 	if !datasetExists {
-		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
-		writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
+		span.Warn("dataset not found")
+		w.WriteHeader(http.StatusNotFound)
 
 		return
 	}
@@ -978,11 +974,12 @@ func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 				slog.String("cursor", cursor),
 				slog.Int("limit", limit),
 			)
-			writeJSON(w, http.StatusBadRequest, "invalid cursor parameter")
+			w.WriteHeader(http.StatusBadRequest)
 
 			return
 		}
-		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
+		span.Error("failed to get dataset files for dataset", err)
+		w.WriteHeader(http.StatusInternalServerError)
 
 		return
 	}
@@ -1021,7 +1018,7 @@ func (api *API) listDatasetFiles(w http.ResponseWriter, r *http.Request) {
 func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 	datasetID := r.PathValue("datasetid")
 
-	ctx, span := observability.StartSpan(r.Context(), "getDataset", attribute.String("dataset.id", datasetID))
+	ctx, span := observability.StartSpan(r.Context(), "getDataset", attribute.String("dataset_id", datasetID))
 	defer span.End()
 
 	if datasetID == "" {
@@ -1043,7 +1040,7 @@ func (api *API) getDataset(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if datasetDetails == nil {
-		span.Warn("dataset not found", slog.String("dataset_id", datasetID))
+		span.Warn("dataset not found")
 		writeJSON(w, http.StatusNotFound, ErrorResponse{
 			Error: http.StatusText(http.StatusNotFound),
 		})
