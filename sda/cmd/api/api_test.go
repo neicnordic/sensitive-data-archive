@@ -24,7 +24,8 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk/jwkbb"
 	"github.com/neicnordic/crypt4gh/keys"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/audit"
@@ -105,7 +106,7 @@ func setup() error {
 		return fmt.Errorf("failed to generate rsa key pair, reason: %v", err)
 	}
 
-	jwkKey, err := jwk.FromRaw(jwkPrivateKey)
+	jwkKey, err := jwk.Import[jwk.Key](jwkPrivateKey)
 	if err != nil {
 		return fmt.Errorf("faield to generate jwk key, reason: %v", err)
 	}
@@ -115,7 +116,7 @@ func setup() error {
 		return fmt.Errorf("failed to create rsa token, reason: %v", err)
 	}
 
-	jwkPublicKeyBytes, err := jwk.EncodePEM(&jwkPrivateKey.PublicKey)
+	jwkPublicKeyBytes, err := jwkbb.EncodePEM(&jwkPrivateKey.PublicKey)
 	if err != nil {
 		return fmt.Errorf("failed to pem encode jwk public key, reason: %v", err)
 	}

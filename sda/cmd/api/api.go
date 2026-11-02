@@ -15,7 +15,7 @@ import (
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/audit"
 	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"

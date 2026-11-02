@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -123,7 +123,7 @@ func newKeyPair(t *testing.T) (*rsa.PrivateKey, jwk.Key) {
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	pub, err := jwk.FromRaw(&priv.PublicKey)
+	pub, err := jwk.Import[jwk.Key](&priv.PublicKey)
 	require.NoError(t, err)
 	require.NoError(t, jwk.AssignKeyID(pub))
 
@@ -143,7 +143,7 @@ func signJWT(t *testing.T, priv *rsa.PrivateKey, iss, sub string, exp time.Time)
 	headers := jws.NewHeaders()
 	require.NoError(t, headers.Set(jwk.KeyIDKey, "test-key"))
 
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, priv, jws.WithProtectedHeaders(headers)))
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), priv, jws.WithProtectedHeaders(headers)))
 	require.NoError(t, err)
 
 	return string(signed)

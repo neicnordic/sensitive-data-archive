@@ -19,9 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwk/jwkbb"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/crypt4gh/keys"
 	"golang.org/x/crypto/ssh"
 )
@@ -133,12 +134,12 @@ func ParsePrivateRSAKey(path, keyName string) (jwk.Key, error) {
 		return nil, err
 	}
 
-	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
+	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithX509(true))
 	if err != nil {
 		return nil, err
 	}
 
-	if prKeyParsed.KeyType() != "RSA" {
+	if prKeyParsed.KeyType() != jwa.RSA() {
 		return nil, fmt.Errorf("bad key format, expected RSA got %v", prKeyParsed.KeyType())
 	}
 
@@ -154,14 +155,14 @@ func CreateRSAkeys(prPath, pubPath string) error {
 	publickey := &privatekey.PublicKey
 
 	// dump private key to file
-	privateKeyBytes, err := jwk.EncodePEM(privatekey)
+	privateKeyBytes, err := jwkbb.EncodePEM(privatekey)
 	if err != nil {
 		return err
 	}
 	_ = os.WriteFile(prPath+"/rsa", privateKeyBytes, 0600)
 
 	// dump public key to file
-	publicKeyBytes, err := jwk.EncodePEM(publickey)
+	publicKeyBytes, err := jwkbb.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}
@@ -219,7 +220,12 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
-	if err := jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+	alg, err := jwa.KeyAlgorithmFrom(headerAlg)
+	if err != nil {
+		return "algorithm detection failed", err
+	}
+
+	if err := jwtKey.Set(jwk.AlgorithmKey, alg); err != nil {
 		return "Set algorithm failed", err
 	}
 
@@ -230,7 +236,7 @@ func CreateRSAToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any
 		}
 	}
 
-	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, jwtKey))
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
@@ -243,7 +249,12 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any)
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
-	if err := jwtKey.Set(jwk.AlgorithmKey, jwa.KeyAlgorithmFrom(headerAlg)); err != nil {
+	alg, err := jwa.KeyAlgorithmFrom(headerAlg)
+	if err != nil {
+		return "algorithm detection failed", err
+	}
+
+	if err := jwtKey.Set(jwk.AlgorithmKey, alg); err != nil {
 		return "Set algorithm failed", err
 	}
 
@@ -254,7 +265,7 @@ func CreateECToken(jwtKey jwk.Key, headerAlg string, tokenClaims map[string]any)
 		}
 	}
 
-	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtKey))
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.ES256(), jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
@@ -271,14 +282,14 @@ func CreateHSToken(key []byte, tokenClaims map[string]any) (string, error) {
 		}
 	}
 
-	jwtKey, err := jwk.FromRaw(key)
+	jwtKey, err := jwk.Import[jwk.Key](key)
 	if err != nil {
 		return "Create key failed", err
 	}
 	if err := jwk.AssignKeyID(jwtKey); err != nil {
 		return "AssignKeyID failed", err
 	}
-	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, jwtKey))
+	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.HS256(), jwtKey))
 	if err != nil {
 		return "no-token", err
 	}
@@ -294,12 +305,12 @@ func ParsePrivateECKey(path, keyName string) (jwk.Key, error) {
 		return nil, err
 	}
 
-	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
+	prKeyParsed, err := jwk.ParseKey(prKey, jwk.WithX509(true))
 	if err != nil {
 		return nil, err
 	}
 
-	if prKeyParsed.KeyType() != "EC" {
+	if prKeyParsed.KeyType() != jwa.EC() {
 		return nil, fmt.Errorf("bad key format, expected EC got %v", prKeyParsed.KeyType())
 	}
 
@@ -315,14 +326,14 @@ func CreateECkeys(prPath, pubPath string) error {
 	publickey := &privatekey.PublicKey
 
 	// dump private key to file
-	privateKeyBytes, err := jwk.EncodePEM(privatekey)
+	privateKeyBytes, err := jwkbb.EncodePEM(privatekey)
 	if err != nil {
 		return err
 	}
 	_ = os.WriteFile(prPath+"/ec", privateKeyBytes, 0600)
 
 	// dump public key to file
-	publicKeyBytes, err := jwk.EncodePEM(publickey)
+	publicKeyBytes, err := jwkbb.EncodePEM(publickey)
 	if err != nil {
 		return err
 	}

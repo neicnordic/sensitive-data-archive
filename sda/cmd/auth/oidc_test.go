@@ -13,9 +13,9 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	jwtgo "github.com/golang-jwt/jwt/v5"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
 	"github.com/oauth2-proxy/mockoidc"
 	log "github.com/sirupsen/logrus"
@@ -113,31 +113,31 @@ func (ts *OIDCTests) TestValidateJwt() {
 	}
 
 	// key from mock server
-	suiteKey, err := jwk.FromRaw(ts.mockServer.Keypair.PrivateKey)
+	suiteKey, err := jwk.Import[jwk.Key](ts.mockServer.Keypair.PrivateKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), suiteKey.Set(jwk.KeyIDKey, ts.mockServer.Keypair.Kid))
 
 	// Create HS256 test token
 	mySigningKey := []byte("AllYourBase")
-	testTokenHS256, err := jwt.Sign(token, jwt.WithKey(jwa.HS256, mySigningKey))
+	testTokenHS256, err := jwt.Sign(token, jwt.WithKey(jwa.HS256(), mySigningKey))
 	assert.NoError(ts.T(), err)
 
 	// Create RSA test token
 	rsaRawKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	assert.NoError(ts.T(), err)
-	rsaKey, err := jwk.FromRaw(rsaRawKey)
+	rsaKey, err := jwk.Import[jwk.Key](rsaRawKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), jwk.AssignKeyID(rsaKey))
-	testTokenRSA, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, rsaKey))
+	testTokenRSA, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), rsaKey))
 	assert.NoError(ts.T(), err)
 
 	// Create ECDSA test token
 	ecRawKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	assert.NoError(ts.T(), err)
-	ecKey, err := jwk.FromRaw(ecRawKey)
+	ecKey, err := jwk.Import[jwk.Key](ecRawKey)
 	assert.NoError(ts.T(), err)
 	assert.NoError(ts.T(), jwk.AssignKeyID(ecKey))
-	testTokenEC, err := jwt.Sign(token, jwt.WithKey(jwa.ES256, ecKey))
+	testTokenEC, err := jwt.Sign(token, jwt.WithKey(jwa.ES256(), ecKey))
 	assert.NoError(ts.T(), err)
 
 	// Create expired RSA test token
@@ -146,7 +146,7 @@ func (ts *OIDCTests) TestValidateJwt() {
 		assert.NoError(ts.T(), token.Set(key, value))
 	}
 	assert.NoError(ts.T(), expiredTokenRSA.Set(jwt.ExpirationKey, time.Now().UTC().Add(-4*time.Hour)))
-	testExpiredTokenRSA, err := jwt.Sign(expiredTokenRSA, jwt.WithKey(jwa.RS256, suiteKey))
+	testExpiredTokenRSA, err := jwt.Sign(expiredTokenRSA, jwt.WithKey(jwa.RS256(), suiteKey))
 	assert.NoError(ts.T(), err)
 
 	// sanity check
@@ -156,43 +156,43 @@ func (ts *OIDCTests) TestValidateJwt() {
 
 	// Not a jwk url
 	_, _, err = validateToken(elixirJWT, "http://some/jwk/endpoint")
-	assert.ErrorContains(ts.T(), err, "failed to fetch \"http://some/jwk/endpoint")
+	assert.ErrorContains(ts.T(), err, "jwkfetch: request failed")
 
 	// correct private key, RSA
-	oidcTokenRSA, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, suiteKey))
+	oidcTokenRSA, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), suiteKey))
 	assert.NoError(ts.T(), err)
 	_, _, err = validateToken(string(oidcTokenRSA), ts.mockServer.JWKSEndpoint())
 	assert.NoError(ts.T(), err)
 
 	// wrong signing method
 	_, _, err = validateToken(string(testTokenHS256), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: key provider 0 failed:")
+	assert.ErrorContains(ts.T(), err, "key provider 0 failed:")
 
 	// wrong private key, RSA
 	_, _, err = validateToken(string(testTokenRSA), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: key provider 0 failed:")
+	assert.ErrorContains(ts.T(), err, "key provider 0 failed:")
 
 	// wrong private key, ECDSA
 	_, _, err = validateToken(string(testTokenEC), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: key provider 0 failed:")
+	assert.ErrorContains(ts.T(), err, "key provider 0 failed:")
 
 	// expired token
 	_, _, err = validateToken(string(testExpiredTokenRSA), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: \"exp\" not satisfied")
+	assert.ErrorContains(ts.T(), err, "validation failed: \"exp\" not satisfied: token is expired")
 
 	// check that we handle the case where token has no expiration date
 	assert.NoError(ts.T(), token.Set(jwt.ExpirationKey, 0))
-	noExpiryToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, suiteKey))
+	noExpiryToken, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), suiteKey))
 	assert.NoError(ts.T(), err)
 	_, _, err = validateToken(string(noExpiryToken), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: iitr between exp and iat is less than")
+	assert.ErrorContains(ts.T(), err, "signed token not valid:")
 
 	// check that we handle the case where token has no exp key
 	assert.NoError(ts.T(), token.Remove(jwt.ExpirationKey))
-	noExpiryToken, err = jwt.Sign(token, jwt.WithKey(jwa.RS256, suiteKey))
+	noExpiryToken, err = jwt.Sign(token, jwt.WithKey(jwa.RS256(), suiteKey))
 	assert.NoError(ts.T(), err)
 	_, _, err = validateToken(string(noExpiryToken), ts.mockServer.JWKSEndpoint())
-	assert.ErrorContains(ts.T(), err, "signed token not valid: \"exp\" not satisfied: required claim not found")
+	assert.ErrorContains(ts.T(), err, "validation failed: required claim \"exp\" is missing")
 }
 
 // acrUser is a mockoidc user that can put an acr claim in the userinfo

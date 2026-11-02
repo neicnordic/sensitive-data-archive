@@ -78,12 +78,17 @@ func (api *API) rbac(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 
-		subject := token.Subject()
+		subject, ok := token.Subject()
+		if !ok {
+			writeJSON(w, http.StatusBadRequest, "Bad subject")
+
+			return
+		}
 		event.UserID = subject
 		urlPath := r.URL.Path
 		method := r.Method
 
-		ok, err := api.enforcer.Enforce(subject, urlPath, method)
+		ok, err = api.enforcer.Enforce(subject, urlPath, method)
 		if err != nil {
 			span.Error("failed to enforce subject for the request url", err,
 				slog.String("subject", subject),
@@ -240,7 +245,7 @@ func parseLimitParam(limitStr string) (int, error) {
 }
 
 func (api *API) getFiles(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "getFiles")
+	_, span := observability.StartSpan(r.Context(), "getFiles")
 	defer span.End()
 
 	token, err := api.auth.Authenticate(r)
@@ -262,7 +267,13 @@ func (api *API) getFiles(w http.ResponseWriter, r *http.Request) {
 
 	cursor := r.URL.Query().Get("cursor")
 	pathPrefix := r.URL.Query().Get("path_prefix")
-	files, nextCursor, err := api.db.GetUserFiles(ctx, token.Subject(), pathPrefix, false, limit, cursor)
+	subject, ok := token.Subject()
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, "Bad subject")
+
+		return
+	}
+	files, nextCursor, err := api.db.GetUserFiles(r.Context(), subject, pathPrefix, false, limit, cursor)
 	if err != nil {
 		if errors.Is(err, database.ErrInvalidCursor) {
 			span.Error("invalid cursor parameter", err,
@@ -359,7 +370,13 @@ func (api *API) updateFileEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := api.db.UpdateFileEventLog(ctx, fileID, event, token.Subject(), string(details), "{}"); err != nil {
+	subject, ok := token.Subject()
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, "Bad subject")
+
+		return
+	}
+	if err := api.db.UpdateFileEventLog(ctx, fileID, event, subject, string(details), "{}"); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			span.Error("file not found", err, slog.String("file", fileID))
 			writeJSON(w, http.StatusNotFound, http.StatusText(http.StatusNotFound))
@@ -1618,7 +1635,7 @@ func (api *API) listUserDatasets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
-	ctx, span := observability.StartSpan(r.Context(), "listDatasets")
+	_, span := observability.StartSpan(r.Context(), "listDatasets")
 	defer span.End()
 
 	token, err := api.auth.Authenticate(r)
@@ -1630,9 +1647,15 @@ func (api *API) listDatasets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	datasets, err := api.db.ListUserDatasets(ctx, token.Subject())
+	subject, ok := token.Subject()
+	if !ok {
+		writeJSON(w, http.StatusBadRequest, "Bad subject")
+
+		return
+	}
+	datasets, err := api.db.ListUserDatasets(r.Context(), subject)
 	if err != nil {
-		span.Error("could not list users datasets", err, slog.String("user", token.Subject()))
+		span.Error("could not list users datasets", err, slog.String("user", subject))
 		writeJSON(w, http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError))
 
 		return

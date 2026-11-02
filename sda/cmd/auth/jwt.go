@@ -1,13 +1,13 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 )
 
 func generateJwtToken(tokenClaims map[string]any, keyPath, alg string) (string, string, error) {
@@ -16,7 +16,7 @@ func generateJwtToken(tokenClaims map[string]any, keyPath, alg string) (string, 
 		return "", "", err
 	}
 
-	jwtKey, err := jwk.ParseKey(prKey, jwk.WithPEM(true))
+	jwtKey, err := jwk.ParseKey(prKey, jwk.WithX509(true))
 	if err != nil {
 		return "", "", err
 	}
@@ -33,12 +33,16 @@ func generateJwtToken(tokenClaims map[string]any, keyPath, alg string) (string, 
 			return "", "", err
 		}
 	}
-	expireDate, _ := token.Get(jwt.ExpirationKey)
+	expireDate, _ := token.Expiration()
 
-	tokenString, err := jwt.Sign(token, jwt.WithKey(jwa.KeyAlgorithmFrom(alg), jwtKey))
+	keyAlg, err := jwa.KeyAlgorithmFrom(alg)
+	if err != nil {
+		return "", "", errors.New("unknown key algorithm")
+	}
+	tokenString, err := jwt.Sign(token, jwt.WithKey(keyAlg, jwtKey))
 	if err != nil {
 		return "", "", err
 	}
 
-	return string(tokenString), expireDate.(time.Time).Format("2006-01-02 15:04:05"), nil
+	return string(tokenString), expireDate.Format("2006-01-02 15:04:05"), nil
 }

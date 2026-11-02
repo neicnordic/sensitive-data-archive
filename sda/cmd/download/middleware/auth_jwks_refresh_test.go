@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v4/jwa"
+	"github.com/lestrrat-go/jwx/v4/jwk"
+	"github.com/lestrrat-go/jwx/v4/jws"
+	"github.com/lestrrat-go/jwx/v4/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -70,7 +70,7 @@ func newKidKeyPair(t *testing.T, kid string) (*rsa.PrivateKey, jwk.Key) {
 
 	priv, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	pub, err := jwk.FromRaw(&priv.PublicKey)
+	pub, err := jwk.Import[jwk.Key](&priv.PublicKey)
 	require.NoError(t, err)
 	require.NoError(t, pub.Set(jwk.KeyIDKey, kid))
 
@@ -87,7 +87,7 @@ func signWithKid(t *testing.T, priv *rsa.PrivateKey, kid string, exp time.Time) 
 
 	headers := jws.NewHeaders()
 	require.NoError(t, headers.Set(jwk.KeyIDKey, kid))
-	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, priv, jws.WithProtectedHeaders(headers)))
+	signed, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), priv, jws.WithProtectedHeaders(headers)))
 	require.NoError(t, err)
 
 	return string(signed)
@@ -98,7 +98,9 @@ func newURLAuthenticator(t *testing.T, url string, static jwk.Set) *Authenticato
 	t.Helper()
 
 	a := &Authenticator{Keyset: static, staticKeys: static, jwksURL: url}
+	t.Log(a.keys().Len())
 	require.NoError(t, a.loadKeysFromURL(url))
+	t.Log(a.keys().Len())
 	a.lastRefresh = time.Now()
 
 	return a
