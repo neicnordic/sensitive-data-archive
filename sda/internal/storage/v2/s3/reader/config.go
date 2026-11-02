@@ -18,7 +18,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws" // nolint: staticcheck
 )
 
 type endpointConfig struct {

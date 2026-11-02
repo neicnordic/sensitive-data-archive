@@ -29,7 +29,7 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
-	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws" // nolint: staticcheck
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gorilla/mux/otelmux"
 )
 
