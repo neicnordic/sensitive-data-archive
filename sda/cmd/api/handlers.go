@@ -1091,7 +1091,7 @@ func (api *API) removeFileFromDataset(w http.ResponseWriter, r *http.Request) {
 	}
 	marshaledMsg, _ := json.Marshal(&datasetFileRemoval)
 	if err := schema.ValidateJSON(fmt.Sprintf("%s/dataset-file-removal.json", apiconfig.SchemaPath()), marshaledMsg); err != nil {
-		span.Error("failed to validate dataset mapping message", err)
+		span.Error("failed to validate dataset file removal message", err)
 		w.WriteHeader(http.StatusInternalServerError)
 
 		return
@@ -1099,7 +1099,7 @@ func (api *API) removeFileFromDataset(w http.ResponseWriter, r *http.Request) {
 
 	fileRemovalMessage := broker.Message{Key: datasetID, Headers: nil, Body: marshaledMsg}
 	if err := api.mq.Publish(ctx, "mappings", fileRemovalMessage); err != nil {
-		span.Error("failed to publish mappings message", err)
+		span.Error("failed to publish dataset file removal message", err)
 		w.WriteHeader(http.StatusInternalServerError)
 
 		return
