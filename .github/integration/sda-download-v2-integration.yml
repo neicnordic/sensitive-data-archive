@@ -218,7 +218,7 @@ services:
       - JWT_KEY_FILE=/shared/keys/jwt.key
     extra_hosts:
       - "localhost:host-gateway"
-    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.25-alpine
+    image: ghcr.io/neicnordic/sda-ci-mirror:golang-1.27-alpine
     profiles:
       - tests
     volumes:
