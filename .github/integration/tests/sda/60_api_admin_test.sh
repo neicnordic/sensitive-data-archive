@@ -460,7 +460,7 @@ if ! grep -qi '^X-Next-Cursor:[[:space:]]*[^[:space:]]' "$headers"; then
 fi
 
 dataset_file_removal_resp="$(curl -s -k -L -o /dev/null -w "%{http_code}\n" -H "Authorization: Bearer $admin_token" -X DELETE "http://api:8080/dataset/SYNC-001-12345/files/SYNC-123-00003")"
-if [ "$dataset_file_removal_resp" != "202" ]; then<<<<<<< HEAD
+if [ "$dataset_file_removal_resp" != "202" ]; then
 
     echo "Error when requesting to remove file from dataset, expected 202 got: $dataset_file_removal_resp"
     exit 1
