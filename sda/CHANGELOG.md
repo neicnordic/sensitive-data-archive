@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Update GO to version 1.27
   - sda apps
+  - sda-admin
 - Add observability package which adds support for tracing and metrics collecting and exporting with OpenTelemetry
   - See [Observability README.md](pkg/observability/README.md) for additional information
   - Add OpenTelemetry instrumentation for the PostgreSQL database connection
