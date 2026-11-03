@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [5.1.0] - 2026-11-03
+
 ### Added
 - Add observability configuration options
   - `global.observability` Observability related variable configuration
@@ -21,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed spec.selector.matchLabels on the [mapper-deploy.yaml](templates/mapper-deploy.yaml) to follow same naming convention as all other, which is immutable so an existing deployment will require manual deletion of the mapper deployment before upgrade
+
+### Changed
+- Bump default sda app version -> v4.1.0
 
 ## [5.0.1] - 2026-09-24
 
