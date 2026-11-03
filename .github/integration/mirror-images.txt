@@ -39,3 +39,4 @@ grafana/grafana-enterprise:13.2.1@sha256:a297072de9f2f02e52166cf853281d1478e94d7
 quay.io/ceph/vstart-cluster:19.2.6@sha256:e07ed915d5f253c8926fdc5862cd739e6f4cf404b5aea6474371aa0837df89bb ceph-vstart-cluster-19.2.6
 neicnordic/openssl-alpine:latest@sha256:112ec002013bcb821a33163e01584664f9ef729d348ebbaa0975532f224c77ff neicnordic-openssl-alpine-sha-112ec002013b
 neicnordic/pg-client:latest@sha256:52f4bc3ba309714d1ea8bb5093ab98c0cddff31d2991ff91bd2f27a3ba3d4e00 neicnordic-pg-client-sha-52f4bc3ba309
+# selection test for #2733, do not merge
