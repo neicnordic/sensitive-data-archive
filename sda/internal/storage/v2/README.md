@@ -119,6 +119,11 @@ The location broker is currently powered by the database where we keep store inf
 how big the files are.
 Meaning if the database is incorrect we risk exceeding any possible quotas on the storage implementation side.
 
+The object count assumes that each location is used in only one role, so the inbox, archive and backup never share a
+bucket or directory.
+If they do, `max_objects` only counts the files of the role that is writing, and the writer can put more objects in the
+location than configured.
+
 The location broker will cache the count of objects and size of a location based on
 the [cacheTTL](#location-broker-config) config.
 Meaning the higher the value the higher the risk is that we could exceed the configured quota in favour of performance
