@@ -46,6 +46,7 @@ jobs:
           filters: |
             all: &all
               - ".github/integration/**"
+              - "!.github/integration/mirror-images.txt" # read only by check_mirror, which always runs
               - ".github/workflows/pr_build_and_test_images.yml"
               - "!**/*.md"
             postgres:
