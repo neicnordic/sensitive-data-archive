@@ -9,11 +9,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Update GO to version 1.27
-  - sda apps
-  - sda-admin
-  - sda-download
-  - sda-validator/orchestrator
 - Add observability package which adds support for tracing and metrics collecting and exporting with OpenTelemetry
   - See [Observability README.md](pkg/observability/README.md) for additional information
   - Add OpenTelemetry instrumentation for the PostgreSQL database connection
@@ -44,6 +39,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - postgresql: document how to move an existing database from the PostgreSQL 15 image (`v3.1.63` and earlier) to the PostgreSQL 18 image (`v3.1.64` and later). The data directory is not compatible across the major version; dump with the old image and restore into the new one, see `postgresql/README.md`.
 - api: update /dataset/${datasetID}/release to only reject requests when the dataset has `deprecated`, or `released` status
   - i.e. allow triggering release of datasets with statuses: `registered`, and `file_removed`
+- Update GO to version 1.27
+  - sda: includes some library updates
+  - sda-admin
+  - sda-download
+  - sda-validator/orchestrator
+  - All containers in the integration tests
 
 ### Fixed
 
