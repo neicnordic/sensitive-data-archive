@@ -17,7 +17,6 @@ BEGIN
 
     GRANT DELETE ON sda.file_dataset TO mapper;
     GRANT SELECT ON sda.dataset_event_log TO mapper;
-    GRANT SELECT ON sda.dataset_references TO download;
 
   ELSE
     RAISE NOTICE 'Schema migration from % to % does not apply now, skipping', sourcever, sourcever+1;
