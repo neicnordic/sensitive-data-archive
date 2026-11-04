@@ -186,6 +186,7 @@ jobs:
         with:
           context: ./${{ matrix.path }}
           push: true
+          provenance: false
           tags: |
             ghcr.io/${{ github.repository }}:v${{ inputs.version }}${{ matrix.image-tag-suffix }}
           labels: |
