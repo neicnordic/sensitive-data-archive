@@ -29,3 +29,7 @@ jobs:
       # Deletes only on the schedule and on a manual run with dry_run unchecked.
       - name: Delete unused container versions
         run: .github/scripts/clean_ghcr_images.sh neicnordic sensitive-data-archive ${{ github.event_name != 'schedule' && (github.event_name != 'workflow_dispatch' || inputs.dry_run) }}
+
+      - name: Check that every tagged image still pulls
+        if: ${{ !cancelled() }}
+        run: .github/scripts/check_tagged_images.sh neicnordic sensitive-data-archive
