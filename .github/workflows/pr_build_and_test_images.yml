@@ -159,6 +159,7 @@ jobs:
         with:
           context: ./${{ matrix.path }}
           push: true
+          provenance: false
           tags: |
             ghcr.io/${{ github.repository }}:PR${{ env.PR_NUMBER }}${{ matrix.image-tag-suffix }}
           labels: | # As this is a PR we set the version by the git sha
