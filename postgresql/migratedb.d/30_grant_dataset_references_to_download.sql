@@ -11,7 +11,14 @@ BEGIN
       sourcever, sourcever + 1;
     RAISE NOTICE 'Changes: %', changes;
 
-    GRANT SELECT ON sda.dataset_references TO download;
+    IF EXISTS (
+      SELECT FROM pg_catalog.pg_roles
+      WHERE rolname = 'download'
+    ) THEN
+      GRANT SELECT ON sda.dataset_references TO download;
+    ELSE
+      RAISE NOTICE 'Role "download" does not exist. Skipping grant.';
+    END IF;
 
     INSERT INTO sda.dbschema_version
     VALUES (sourcever + 1, now(), changes);
