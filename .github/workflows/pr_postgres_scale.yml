@@ -1,0 +1,61 @@
+name: Postgres tests (large)
+
+on:
+  pull_request:
+    paths:
+      - "postgresql/**"
+      - ".github/integration/postgres-scale.yml"
+      - ".github/integration/scripts/seed_migrate_db.sh"
+      - ".github/integration/tests/postgres-scale/**"
+      - ".github/workflows/pr_postgres_scale.yml"
+  workflow_dispatch:
+
+env:
+  COMPOSE: docker compose -f .github/integration/postgres-scale.yml
+  KILL_INTERVAL: 60
+  MAX_RESTARTS: 15
+
+jobs:
+  migrate_at_scale:
+    name: Migrate a seeded database under a liveness probe
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v7
+
+      - name: Seed and start the migration
+        run: $COMPOSE up -d --build migrate
+
+      # The sda-db chart's liveness probe connects over TCP, which the server
+      # that runs the migrations does not listen on, so a pod is killed about
+      # a minute into any migration. Do the same here until migrate is healthy.
+      - name: Kill migrate every minute until it is healthy
+        run: |
+          for i in $(seq 1 "$MAX_RESTARTS"); do
+            sleep "$KILL_INTERVAL"
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' migrate)" = healthy ]; then
+              echo "healthy after $((i - 1)) restarts"
+              exit 0
+            fi
+            echo "restart $i"
+            $COMPOSE restart -t 0 migrate
+          done
+          echo "migrate never became healthy within $MAX_RESTARTS restarts"
+          exit 1
+
+      - name: Test the migrated database
+        run: $COMPOSE run tests
+
+      - name: Migration timings
+        if: always()
+        run: |
+          {
+            echo "| script | runs | seconds |"
+            echo "|---|---|---|"
+            docker exec migrate cat /var/lib/postgresql/data/migration_timings.log |
+              awk '{ runs[$2]++; secs[$2]+=$3 } END { for (s in runs) print "| " s " | " runs[s] " | " secs[s] " |" }' | sort
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Migrate container log
+        if: failure()
+        run: docker logs migrate

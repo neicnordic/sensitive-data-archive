@@ -28,8 +28,13 @@ migrate() {
 
 		for f in migratedb.d/*.sql; do
 			echo "Running migration script $f"
-			psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --no-psqlrc --dbname "${POSTGRES_DB:-sda}" -f "$f"
-			echo "Done"
+			start=$(date +%s)
+			# one line per run in PGDATA, so a restarted migration can be told from a finished one
+			# shortcut: a run killed mid-script leaves no line, count restarts from the caller's log
+			psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --no-psqlrc --dbname "${POSTGRES_DB:-sda}" -f "$f" ||
+				{ echo "$start $f $(($(date +%s) - start)) failed" >>"$PGDATA/migration_timings.log"; exit 1; }
+			echo "$start $f $(($(date +%s) - start)) ok" >>"$PGDATA/migration_timings.log"
+			echo "Done, took $(($(date +%s) - start)) s"
 		done 2>&1 | tee "$migfile"
 
 		if grep -F 'Doing migration from' "$migfile"; then
