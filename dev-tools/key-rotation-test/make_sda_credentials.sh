@@ -156,11 +156,12 @@ if [ ! -f "/shared/crypt4gh" ]; then
             ;;
     esac
     echo "Detected architecture: $ARCH, downloading crypt4gh for: $CRYPT4GH_ARCH"
-    latest_c4gh=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
-      https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.tag_name')
-    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
-      "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_${CRYPT4GH_ARCH}.tar.gz" \
-      | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    # Same version as .github/integration/scripts/tool_versions.sh.
+    CRYPT4GH_VERSION=v1.16.0
+    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL -o /tmp/crypt4gh.tar.gz \
+      "https://github.com/neicnordic/crypt4gh/releases/download/${CRYPT4GH_VERSION}/crypt4gh_${CRYPT4GH_ARCH}.tar.gz"
+    tar -xzf /tmp/crypt4gh.tar.gz -C /shared/ crypt4gh
+    chmod +x /shared/crypt4gh
 fi
 
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
