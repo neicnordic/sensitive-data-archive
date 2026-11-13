@@ -1,5 +1,7 @@
 #!/bin/sh
 set -e
+# shellcheck source=/dev/null
+. "$(dirname "$0")/tool_versions.sh"
 
 URI=http://rabbitmq:15672
 
@@ -124,11 +126,10 @@ if [ ! -f "/shared/crypt4gh" ]; then
             ;;
     esac
     echo "Detected architecture: $ARCH, downloading crypt4gh for: $CRYPT4GH_ARCH"
-    latest_c4gh=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
-      https://api.github.com/repos/neicnordic/crypt4gh/releases/latest | jq -r '.name')
-    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
-      "https://github.com/neicnordic/crypt4gh/releases/download/$latest_c4gh/crypt4gh_${CRYPT4GH_ARCH}.tar.gz" \
-      | tar -xz -C /shared/ && chmod +x /shared/crypt4gh
+    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL -o /tmp/crypt4gh.tar.gz \
+      "https://github.com/neicnordic/crypt4gh/releases/download/${CRYPT4GH_VERSION}/crypt4gh_${CRYPT4GH_ARCH}.tar.gz"
+    tar -xzf /tmp/crypt4gh.tar.gz -C /shared/ crypt4gh
+    chmod +x /shared/crypt4gh
 fi
 
 if [ ! -f "/shared/c4gh.sec.pem" ]; then
@@ -182,9 +183,8 @@ fi
 ## download grpcurl
 if [ ! -f "/shared/grpcurl" ]; then
     echo "downloading grpcurl"
-    latest_grpcurl=$(curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 30 -fsSL \
-      https://api.github.com/repos/fullstorydev/grpcurl/releases/latest | jq -r '.name' | sed -e 's/v//')
-    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL \
-      "https://github.com/fullstorydev/grpcurl/releases/download/v${latest_grpcurl}/grpcurl_${latest_grpcurl}_linux_x86_64.tar.gz" \
-      | tar -xz -C /shared/ && chmod +x /shared/grpcurl
+    curl -4 --retry 5 --retry-delay 2 --connect-timeout 10 --max-time 120 -fSL -o /tmp/grpcurl.tar.gz \
+      "https://github.com/fullstorydev/grpcurl/releases/download/v${GRPCURL_VERSION}/grpcurl_${GRPCURL_VERSION}_linux_x86_64.tar.gz"
+    tar -xzf /tmp/grpcurl.tar.gz -C /shared/ grpcurl
+    chmod +x /shared/grpcurl
 fi
