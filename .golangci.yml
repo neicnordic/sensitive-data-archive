@@ -1,3 +1,4 @@
+# Throwaway change for #2758, do not merge.
 version: "2"
 formatters:
   enable:
