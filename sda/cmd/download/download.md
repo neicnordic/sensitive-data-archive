@@ -986,3 +986,4 @@ make integrationtest-sda-download-v2-down  # Tear down
 
 See [TESTING.md](https://github.com/neicnordic/sensitive-data-archive/blob/main/sda/cmd/download/TESTING.md) for detailed local testing instructions including
 Docker Compose setup, database seeding, and example curl commands.
+
