@@ -1,13 +1,27 @@
 name: Code tests
 
+# Called by the PR workflow, whose `changes` job selects the modules a change touches
 on:
-  pull_request:
-    paths:
-      - "sda/**"
-      - "sda-download/**"
-      - "sda-validator/orchestrator/**"
-      - "sda-admin/**"
-      - ".github/workflows/pr_code_tests.yml"
+  workflow_call:
+    inputs:
+      sda:
+        type: boolean
+        default: false
+      download:
+        type: boolean
+        default: false
+      admin:
+        type: boolean
+        default: false
+      validator:
+        type: boolean
+        default: false
+      sftp-inbox:
+        type: boolean
+        default: false
+    secrets:
+      CODECOV_TOKEN:
+        required: false
 
 env:
   go-version: '1.27'
@@ -16,6 +30,7 @@ env:
 jobs:
 
   sftp_inbox:
+    if: inputs.sftp-inbox
     strategy:
       matrix:
         java-version: [19]
@@ -39,18 +54,20 @@ jobs:
         run: cd sda-sftp-inbox && mvn test -B
 
   test_download:
+    if: inputs.download
     name: Test Download
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
 
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda-download/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -62,6 +79,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -70,18 +88,20 @@ jobs:
           fail_ci_if_error: false
 
   test_sda:
+    if: inputs.sda
     name: Test sensitive-data-archive
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
 
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -99,6 +119,7 @@ jobs:
           go test -v -tags=visas -coverprofile=coverage-visas.txt -covermode=atomic ./cmd/download/...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -108,6 +129,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Codecov (download v2 visa)
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -117,18 +139,20 @@ jobs:
           fail_ci_if_error: false
 
   test_sda_admin:
+    if: inputs.admin
     name: Test SDA Admin
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
 
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda-admin/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -140,6 +164,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -148,18 +173,20 @@ jobs:
           fail_ci_if_error: false
 
   test_sda_validator_orchestrator:
+    if: inputs.validator
     name: Test SDA Validator Orchestrator
     runs-on: ubuntu-latest
     steps:
+
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
 
       - name: Set up Go ${{ env.go-version-validator-orchestrator }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version-validator-orchestrator }}
+          cache-dependency-path: sda-validator/orchestrator/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Get dependencies
         run: |
@@ -171,6 +198,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
