@@ -43,7 +43,8 @@ VALUES (0, now(), 'Created with version'),
        (26, now(), 'Add removed file event'),
        (27, now(), 'Add indexes on files for listing a user''s files by path prefix and by id'),
        (28, now(), 'Add index on (dataset_id, id) on file_dataset table'),
-       (29, now(), 'Add file_removed dataset event type');
+       (29, now(), 'Add file_removed dataset event type'),
+       (30, now(), 'Grant download access to dataset_references');
 
 -- Datasets are used to group files, and permissions are set on the dataset
 -- level
