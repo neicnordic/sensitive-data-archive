@@ -32,6 +32,18 @@ jobs:
       doa: ${{ github.event_name == 'schedule' || steps.filter.outputs.doa == 'true' }}
       sftp-inbox: ${{ github.event_name == 'schedule' || steps.filter.outputs.sftp-inbox == 'true' }}
       charts: ${{ github.event_name == 'schedule' || steps.filter.outputs.charts == 'true' }}
+      unit-sda: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-sda == 'true' }}
+      unit-download: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-download == 'true' }}
+      unit-admin: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-admin == 'true' }}
+      unit-validator: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-validator == 'true' }}
+      unit-sftp-inbox: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-sftp-inbox == 'true' }}
+      unit-doa: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-doa == 'true' }}
+      lint-sda: ${{ github.event_name == 'schedule' || steps.code.outputs.lint-sda == 'true' }}
+      lint-download: ${{ github.event_name == 'schedule' || steps.code.outputs.lint-download == 'true' }}
+      lint-admin: ${{ github.event_name == 'schedule' || steps.code.outputs.lint-admin == 'true' }}
+      lint-validator: ${{ github.event_name == 'schedule' || steps.code.outputs.lint-validator == 'true' }}
+      unit: ${{ github.event_name == 'schedule' || steps.code.outputs.unit-sda == 'true' || steps.code.outputs.unit-download == 'true' || steps.code.outputs.unit-admin == 'true' || steps.code.outputs.unit-validator == 'true' || steps.code.outputs.unit-sftp-inbox == 'true' || steps.code.outputs.unit-doa == 'true' }}
+      lint: ${{ github.event_name == 'schedule' || steps.code.outputs.lint-sda == 'true' || steps.code.outputs.lint-download == 'true' || steps.code.outputs.lint-admin == 'true' || steps.code.outputs.lint-validator == 'true' }}
     steps:
       - name: Check out code
         if: github.event_name != 'schedule'
@@ -100,6 +112,55 @@ jobs:
               - "rabbitmq/**"
               - "sda-download/**"
               - "sda-sftp-inbox/**"
+
+      # Unit tests and lint; a separate step so these flags stay out of `any`, which gates the image builds
+      - uses: dorny/paths-filter@v4
+        if: github.event_name != 'schedule'
+        id: code
+        with:
+          token: ""
+          predicate-quantifier: some-with-excludes
+          filters: |
+            code: &code
+              - ".github/workflows/pr_build_and_test_images.yml"
+              - ".github/workflows/pr_code_tests.yml"
+              - ".github/workflows/pr_code_linter.yml"
+              - "!**/*.md"
+            unit-sda:
+              - *code
+              - "sda/**"
+              - "postgresql/initdb.d/**" # sda/internal/database/postgres/db_test.go mounts it
+            unit-download:
+              - *code
+              - "sda-download/**"
+            unit-admin:
+              - *code
+              - "sda-admin/**"
+            unit-validator:
+              - *code
+              - "sda-validator/orchestrator/**"
+            unit-sftp-inbox:
+              - *code
+              - "sda-sftp-inbox/**"
+            unit-doa:
+              - *code
+              - "sda-doa/**"
+            lint-sda:
+              - *code
+              - ".golangci.yml"
+              - "sda/**"
+            lint-download:
+              - *code
+              - ".golangci.yml"
+              - "sda-download/**"
+            lint-admin:
+              - *code
+              - ".golangci.yml"
+              - "sda-admin/**"
+            lint-validator:
+              - *code
+              - ".golangci.yml"
+              - "sda-validator/orchestrator/**"
 
   build_images:
     name: Build ${{ matrix.name }} Docker Image
@@ -557,6 +618,39 @@ jobs:
 
   # The single check to require on main: a job skipped by its `if:` reports success,
   # while a workflow skipped by `paths:` never reports and would block the queue.
+  # The unit tests and lint of the modules a change touches, so the merge queue waits for them too
+  code_tests:
+    name: Code tests
+    needs:
+      - changes
+    if: needs.changes.outputs.unit == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/pr_code_tests.yml
+    with:
+      sda: ${{ needs.changes.outputs.unit-sda == 'true' }}
+      download: ${{ needs.changes.outputs.unit-download == 'true' }}
+      admin: ${{ needs.changes.outputs.unit-admin == 'true' }}
+      validator: ${{ needs.changes.outputs.unit-validator == 'true' }}
+      sftp-inbox: ${{ needs.changes.outputs.unit-sftp-inbox == 'true' }}
+      doa: ${{ needs.changes.outputs.unit-doa == 'true' }}
+    secrets:
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  linter:
+    name: Linter
+    needs:
+      - changes
+    if: needs.changes.outputs.lint == 'true'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/pr_code_linter.yml
+    with:
+      sda: ${{ needs.changes.outputs.lint-sda == 'true' }}
+      download: ${{ needs.changes.outputs.lint-download == 'true' }}
+      admin: ${{ needs.changes.outputs.lint-admin == 'true' }}
+      validator: ${{ needs.changes.outputs.lint-validator == 'true' }}
+
   result:
     name: PR result
     if: always()
@@ -574,6 +668,8 @@ jobs:
       - sda-doa_integration_test
       - sftp-inbox_integration_test
       - chart_tests
+      - code_tests
+      - linter
     runs-on: ubuntu-latest
     permissions:
       issues: write

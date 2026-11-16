@@ -22,6 +22,7 @@ This file is for AI coding agents (Claude Code reads it through `CLAUDE.md`; Cod
 * Integration tests (`make integrationtest-*`) run Docker Compose stacks and are slow.
   Not every target builds its images first: run `make build-all` before `make integrationtest-sda-download-v2`.
   CI runs each one on PRs and in the merge queue when a path it depends on changes (the `changes` job in `.github/workflows/pr_build_and_test_images.yml`), and runs all of them nightly on `main`.
+* The unit tests and golangci-lint follow the same rule per module: that `changes` job selects them, and the PR workflow calls `pr_code_tests.yml` and `pr_code_linter.yml`, so `PR result` and the merge queue wait for them too.
 * Markdown under `docs/decisions/` and `docs/rfcs/` is linted with markdownlint-cli2 using `.markdownlint.yml`.
 
 ## Conventions

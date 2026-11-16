@@ -1,14 +1,30 @@
 name: Code tests
 
+# Called by the PR workflow, whose `changes` job selects the modules a change touches
 on:
-  pull_request:
-    paths:
-      - "sda/**"
-      - "sda-download/**"
-      - "sda-validator/orchestrator/**"
-      - "sda-admin/**"
-      - "sda-doa/**"
-      - ".github/workflows/pr_code_tests.yml"
+  workflow_call:
+    inputs:
+      sda:
+        type: boolean
+        default: false
+      download:
+        type: boolean
+        default: false
+      admin:
+        type: boolean
+        default: false
+      validator:
+        type: boolean
+        default: false
+      sftp-inbox:
+        type: boolean
+        default: false
+      doa:
+        type: boolean
+        default: false
+    secrets:
+      CODECOV_TOKEN:
+        required: false
 
 env:
   go-version: '1.27'
@@ -17,6 +33,7 @@ env:
 jobs:
 
   sftp_inbox:
+    if: inputs.sftp-inbox
     strategy:
       matrix:
         java-version: [19]
@@ -40,6 +57,7 @@ jobs:
         run: cd sda-sftp-inbox && mvn test -B
 
   test_sda_doa:
+    if: inputs.doa
     strategy:
       matrix:
         java-version: [25]
@@ -63,6 +81,7 @@ jobs:
         run: cd sda-doa && mvn test -B -Dtest='!LocalEGADOAApplicationTests'
 
   test_download:
+    if: inputs.download
     name: Test Download
     runs-on: ubuntu-latest
     steps:
@@ -87,6 +106,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -95,6 +115,7 @@ jobs:
           fail_ci_if_error: false
 
   test_sda:
+    if: inputs.sda
     name: Test sensitive-data-archive
     runs-on: ubuntu-latest
     steps:
@@ -125,6 +146,7 @@ jobs:
           go test -v -tags=visas -coverprofile=coverage-visas.txt -covermode=atomic ./cmd/download/...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -134,6 +156,7 @@ jobs:
           fail_ci_if_error: false
 
       - name: Codecov (download v2 visa)
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -143,6 +166,7 @@ jobs:
           fail_ci_if_error: false
 
   test_sda_admin:
+    if: inputs.admin
     name: Test SDA Admin
     runs-on: ubuntu-latest
     steps:
@@ -167,6 +191,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
@@ -175,6 +200,7 @@ jobs:
           fail_ci_if_error: false
 
   test_sda_validator_orchestrator:
+    if: inputs.validator
     name: Test SDA Validator Orchestrator
     runs-on: ubuntu-latest
     steps:
@@ -199,6 +225,7 @@ jobs:
           go test -v -coverprofile=coverage.txt -covermode=atomic ./...
 
       - name: Codecov
+        if: github.event_name != 'merge_group'
         uses: codecov/codecov-action@v7.1.1
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
