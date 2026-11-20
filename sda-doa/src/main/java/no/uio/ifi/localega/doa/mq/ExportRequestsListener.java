@@ -97,7 +97,8 @@ public class ExportRequestsListener {
                             .toList();
                     approvedDatasetIds = approvedMappedDatasetIds;
                 }
-                exportDataset(user, approvedDatasetIds, requestedDatasetId, exportRequest.getPublicKey(), exportRequest.getStartCoordinate(), exportRequest.getEndCoordinate());
+                int exportedFiles = exportDataset(user, approvedDatasetIds, requestedDatasetId, exportRequest.getPublicKey(), exportRequest.getStartCoordinate(), exportRequest.getEndCoordinate());
+                log.info("Exported {} file(s) for dataset {}", exportedFiles, requestedDatasetId);
             } else if (StringUtils.isNotEmpty(exportRequest.getFileId())) {
                 exportFile(user, approvedDatasetIds, exportRequest.getFileId(), exportRequest.getPublicKey(), exportRequest.getStartCoordinate(), exportRequest.getEndCoordinate());
             } else {
@@ -112,30 +113,36 @@ public class ExportRequestsListener {
         }
     }
 
-    private void exportDataset(String user,
-                               Collection<String> datasetIds,
-                               String datasetId,
-                               String publicKey,
-                               String startCoordinate,
-                               String endCoordinate) {
+    private int exportDataset(String user,
+                              Collection<String> datasetIds,
+                              String datasetId,
+                              String publicKey,
+                              String startCoordinate,
+                              String endCoordinate) {
 
         DatasetEventLog latestEvent = metadataService.findLatestByDatasetId(datasetId);
-        if (latestEvent != null) {
-            String event = latestEvent.getEvent();
-            if (event.equals("released")) {
-                metadataService.files(datasetId).forEach(f -> {
-                    try {
-                        exportFile(user, datasetIds, f.getFileId(), publicKey, startCoordinate, endCoordinate);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e.getMessage(), e);
-                    }
-                });
-            } else {
-                log.info("Cannot export. Dataset {} is not released, it is {}", datasetId, event);
-            }
-        } else {
+        if (latestEvent == null) {
             log.info("Cannot export. No event has been registered for Dataset {}", datasetId);
+            return 0;
         }
+        String event = latestEvent.getEvent();
+        if (!event.equals("released")) {
+            log.info("Cannot export. Dataset {} is not released, it is {}", datasetId, event);
+            return 0;
+        }
+        var files = metadataService.files(datasetId);
+        if (files.isEmpty()) {
+            log.info("No files found to export for dataset {}", datasetId);
+            return 0;
+        }
+        files.forEach(f -> {
+            try {
+                exportFile(user, datasetIds, f.getFileId(), publicKey, startCoordinate, endCoordinate);
+            } catch (Exception e) {
+                throw new RuntimeException(e.getMessage(), e);
+            }
+        });
+        return files.size();
     }
 
     private void exportFile(String user,
