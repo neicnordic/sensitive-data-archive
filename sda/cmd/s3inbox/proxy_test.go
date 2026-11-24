@@ -17,8 +17,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/google/uuid"
 	"github.com/lestrrat-go/jwx/v4/jwt"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )

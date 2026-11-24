@@ -3,7 +3,7 @@ package mocks
 import (
 	"context"
 
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2" //nolint: revive
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2" //nolint: revive
 	"github.com/stretchr/testify/mock"
 )
 

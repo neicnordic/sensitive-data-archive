@@ -23,10 +23,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/lestrrat-go/jwx/v4/jwk"
 	s3inboxconf "github.com/neicnordic/sensitive-data-archive/cmd/s3inbox/config"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/brokerconfig/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	"github.com/neicnordic/sensitive-data-archive/pkg/broker/v2/rabbitmq"
+	configv2 "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/aws/aws-sdk-go-v2/otelaws" // nolint: staticcheck
@@ -98,7 +99,7 @@ func run() error {
 		return fmt.Errorf("failed to check if inbox bucket exists due to: %v", err)
 	}
 
-	mqBroker, err := rabbitmq.NewRabbitMQBroker(ctx)
+	mqBroker, err := rabbitmq.NewRabbitMQBroker(ctx, brokerconfig.Config())
 	if err != nil {
 		return fmt.Errorf("failed to initialize broker due to: %v", err)
 	}

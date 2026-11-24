@@ -13,9 +13,10 @@ import (
 	"syscall"
 
 	interceptconfig "github.com/neicnordic/sensitive-data-archive/cmd/intercept/config"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/brokerconfig/v2"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/pkg/broker/v2/rabbitmq"
+	configv2 "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -62,7 +63,7 @@ func run() error {
 	}
 
 	var err error
-	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
+	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx, brokerconfig.Config())
 	if err != nil {
 		return fmt.Errorf("failed to create new rabbit mq broker: %w", err)
 	}

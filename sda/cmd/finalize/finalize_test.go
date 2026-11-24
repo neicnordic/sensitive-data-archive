@@ -15,10 +15,10 @@ import (
 	"github.com/neicnordic/crypt4gh/keys"
 	"github.com/neicnordic/crypt4gh/streaming"
 	appconf "github.com/neicnordic/sensitive-data-archive/cmd/finalize/config"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"

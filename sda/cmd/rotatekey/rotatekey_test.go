@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/neicnordic/crypt4gh/keys"
-	brokerv2 "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	brokerv2 "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

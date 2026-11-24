@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	configv2 "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/stretchr/testify/require"
 )
 
