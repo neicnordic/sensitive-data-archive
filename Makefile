@@ -272,6 +272,8 @@ test-sda-sftp-inbox:
 	@docker run --rm -v ./sda-sftp-inbox:/inbox maven:3.9.4-eclipse-temurin-21-alpine sh -c "cd /inbox && mvn test -B"
 test-sda-admin:
 	@cd sda-admin && go test ./... -count=1
+test-sda-doa:
+	@docker run --rm -v ./sda-doa:/doa maven:3.9.16-eclipse-temurin-25 sh -c "cd /doa && mvn test -B -Dtest='!LocalEGADOAApplicationTests'"
 
 # local k8s with k3d
 k3d-version-check: SHELL:=/bin/bash

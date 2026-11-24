@@ -7,6 +7,7 @@ on:
       - "sda-download/**"
       - "sda-validator/orchestrator/**"
       - "sda-admin/**"
+      - "sda-doa/**"
       - ".github/workflows/pr_code_tests.yml"
 
 env:
@@ -37,6 +38,29 @@ jobs:
             ${{ runner.os }}-maven-
       - name: Test
         run: cd sda-sftp-inbox && mvn test -B
+
+  test_sda_doa:
+    strategy:
+      matrix:
+        java-version: [25]
+      fail-fast: true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up JDK ${{ matrix.java-version }}
+        uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: ${{ matrix.java-version }}
+      - uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Test
+        run: cd sda-doa && mvn test -B -Dtest='!LocalEGADOAApplicationTests'
 
   test_download:
     name: Test Download
