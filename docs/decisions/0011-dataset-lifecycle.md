@@ -13,6 +13,7 @@ Currently (sda v4.1.0), datasets can have 4 possible events: `registered`, `file
 but there is little to no enforcement of how a dataset moves through these events, what actions can be done at what state, etc.
 
 For example in the current download (and download-v2) a dataset can be downloaded no matter what the latest event is.
+This is tracked by [#2591](https://github.com/neicnordic/sensitive-data-archive/issues/2591)
 
 Event descriptions:
 
@@ -106,22 +107,18 @@ flowchart TD
     released
     deprecated
 
-    registered --> files_added
-    registered --> deprecated
+    registered --> files_added & deprecated
     files_added --> files_added
     file_removed --> file_removed
     files_added <--> file_removed
     file_removed & files_added ---> released
     files_added & file_removed ---> deprecated
-    released --> deprecated
-    reopened --> released
-    released --> reopened
-    reopened --> files_added
-    reopened --> file_removed
-    reopened --> deprecated
+    released --> reopened & deprecated
+    reopened --> deprecated & released & files_added & file_removed
 ```
 
 The "normal" path for a dataset would be `registered` -> X `files_added` -> `released` -> `deprecated`.
+Where the `released` event marks the dataset as complete, and no more modifications are expected.
 
 A dedicated `reopened` event is preferred over allowing `files_added` / `file_removed` directly after `released` for
 dataset modifications, for the following reasons:
@@ -133,6 +130,7 @@ Without it, the log only shows that files changed, not whether that was intentio
 **Accidental changes cannot silently unrelease a dataset.**
 If file additions / removals were allowed directly after `released`,
 a stale or mistaken request would take a live dataset offline as a side effect. For example:
+
 1. User requests to release a dataset; the release message is queued.
 2. User (or another client) requests file addition; the file addition message is queued.
 3. The release message is processed, and the dataset is `released`.
@@ -145,7 +143,6 @@ dataset has first been explicitly reopened.
 **Modifications after release can be switched off in one place.**
 A deployment that does not want modifications after release can disable the single `reopened` action.
 Without it, the same rule would have to be checked inside both the file addition and file removal actions.
-
 
 * Good, because "versioning" of a dataset could be possible by the number of `released` events.
   * And to get a primitive changelog with the difference in the set of files between each version.
@@ -177,8 +174,7 @@ flowchart TD
     released
     deprecated
 
-    registered --> files_added
-    registered --> deprecated
+    registered --> files_added & deprecated
     files_added --> files_added
     file_removed --> file_removed
     files_added <--> file_removed
