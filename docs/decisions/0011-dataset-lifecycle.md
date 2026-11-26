@@ -123,7 +123,29 @@ flowchart TD
 
 The "normal" path for a dataset would be `registered` -> X `file_addition` -> `released` -> `deprecated`.
 
-The additional `reoponed` event is to enable an event that clearly states the intent for a dataset to be modified after its release.
+A dedicated `reopened` event is preferred over allowing `file_addition` / `file_removed` directly after `released` for
+dataset modifications, for the following reasons:
+
+**Intent is explicit and recorded.** `reopened` states that a modification is about to happen, and its details can record
+when and why (for example, the reason the dataset is being modified).
+Without it, the log only shows that files changed, not whether that was intentional.
+
+**Accidental changes cannot silently unrelease a dataset.**
+If file additions / removals were allowed directly after `released`,
+a stale or mistaken request would take a live dataset offline as a side effect. For example:
+1. User requests to release a dataset; the release message is queued.
+2. User (or another client) requests file addition; the file addition message is queued.
+3. The release message is processed, and the dataset is `released`.
+4. The file addition message is processed, and the dataset is no longer `released`.
+
+The dataset has silently left the released state, and nothing distinguishes this accident from an intentional
+modification. With `reopened`, step 4 is rejected, because a file addition is not valid after `released` unless the
+dataset has first been explicitly reopened.
+
+**Modifications after release can be switched off in one place.**
+A deployment that does not want modifications after release can disable the single `reopened` action.
+Without it, the same rule would have to be checked inside both the file addition and file removal actions.
+
 
 * Good, because "versioning" of a dataset could be possible by the number of `released` events.
   * And to get a primitive changelog with the difference in the set of files between each version.
