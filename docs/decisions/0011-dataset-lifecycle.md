@@ -85,45 +85,45 @@ Introduce new events, and update the current usage of existing ones:
 Event descriptions:
 
 * `registered`
-  * The creation/registration of a dataset accession
-* `file_addition`
-  * The addition of one or more file associations to a dataset
+  * The creation/registration of a dataset accession.
+* `files_added`
+  * The addition of one or more file associations to a dataset (One event per request).
 * `file_removed`
-  * The removal of a file association from a dataset
+  * The removal of a file association from a dataset.
 * `released`
   * The release of a dataset and for it to be available for download.
 * `reopened`
   * The re-opening of a dataset for modifications. Makes the dataset unavailable for download.
 * `deprecated`
-  * The deprecation of a dataset
+  * The deprecation of a dataset.
 
 ```mermaid
 flowchart TD
     reopened
     registered
     file_removed
-    file_addition
+    files_added
     released
     deprecated
 
-    registered --> file_addition
+    registered --> files_added
     registered --> deprecated
-    file_addition --> file_addition
+    files_added --> files_added
     file_removed --> file_removed
-    file_addition <--> file_removed
-    file_removed & file_addition ---> released
-    file_addition & file_removed ---> deprecated
+    files_added <--> file_removed
+    file_removed & files_added ---> released
+    files_added & file_removed ---> deprecated
     released --> deprecated
     reopened --> released
     released --> reopened
-    reopened --> file_addition
+    reopened --> files_added
     reopened --> file_removed
     reopened --> deprecated
 ```
 
-The "normal" path for a dataset would be `registered` -> X `file_addition` -> `released` -> `deprecated`.
+The "normal" path for a dataset would be `registered` -> X `files_added` -> `released` -> `deprecated`.
 
-A dedicated `reopened` event is preferred over allowing `file_addition` / `file_removed` directly after `released` for
+A dedicated `reopened` event is preferred over allowing `files_added` / `file_removed` directly after `released` for
 dataset modifications, for the following reasons:
 
 **Intent is explicit and recorded.** `reopened` states that a modification is about to happen, and its details can record
@@ -153,37 +153,37 @@ Without it, the same rule would have to be checked inside both the file addition
 
 ### Dataset lifecycle no modifications allowed after release
 
-Mainly keep existing lifecycle with the addition of the separation of the `registered` and `file_addition` events, and only allowing the `deprecated` event after `released`.
+Mainly keep existing lifecycle with the addition of the separation of the `registered` and `files_added` events, and only allowing the `deprecated` event after `released`.
 This means that once a dataset has been released, it can not be modified beyond deprecation.
 
 Event descriptions:
 
 * `registered`
-  * The creation/registration of a dataset accession
-* `file_addition`
-  * The addition of one or more file associations to a dataset
+  * The creation/registration of a dataset accession.
+* `files_added`
+  * The addition of one or more file associations to a dataset (One event per request).
 * `file_removed`
-  * The removal of a file association from a dataset
+  * The removal of a file association from a dataset.
 * `released`
   * The release of a dataset and for it to be available for download.
 * `deprecated`
-  * The deprecation of a dataset
+  * The deprecation of a dataset.
 
 ```mermaid
 flowchart TD
     registered
     file_removed
-    file_addition
+    files_added
     released
     deprecated
 
-    registered --> file_addition
+    registered --> files_added
     registered --> deprecated
-    file_addition --> file_addition
+    files_added --> files_added
     file_removed --> file_removed
-    file_addition <--> file_removed
-    file_removed & file_addition ---> released
-    file_addition & file_removed ---> deprecated
+    files_added <--> file_removed
+    file_removed & files_added ---> released
+    files_added & file_removed ---> deprecated
     released --> deprecated
 ```
 
