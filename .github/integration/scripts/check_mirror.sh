@@ -8,8 +8,8 @@ shopt -s inherit_errexit
 
 mirror="ghcr.io/neicnordic/sda-ci-mirror"
 list=".github/integration/mirror-images.txt"
-# not mirrored: ls_aai_mock is outside the mirror's scope, sda-inbox-sftp is built locally
-allowed="harbor.nbis.se/test/ls_aai_mock:.*|neicnordic/sda-inbox-sftp"
+# not mirrored: ls_aai_mock is outside the mirror's scope, sda-inbox-sftp and sda-postgres-scale are built locally
+allowed="harbor.nbis.se/test/ls_aai_mock:.*|neicnordic/sda-inbox-sftp|sda-postgres-scale"
 
 charts=.github/integration/scripts/charts
 manifests=(.github/integration/*.yml sda-download/dev_utils/*.yml sda-sftp-inbox/dev_utils/docker-compose.yml
