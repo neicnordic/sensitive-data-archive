@@ -25,8 +25,8 @@ import (
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/visa"
 	"github.com/neicnordic/sensitive-data-archive/internal/audit"
-	internalconfig "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
+	internalconfig "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 

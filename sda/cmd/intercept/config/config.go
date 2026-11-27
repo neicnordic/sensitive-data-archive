@@ -1,7 +1,7 @@
 package config
 
 import (
-	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 )

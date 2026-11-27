@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	amqp "github.com/rabbitmq/amqp091-go"
 	log "github.com/sirupsen/logrus"
@@ -39,17 +39,13 @@ type rmqBroker struct {
 	publishChannel *amqp.Channel
 	consumerTag    string
 	closed         bool
-	config         *options
+	config         Config
 }
 
-func NewRabbitMQBroker(ctx context.Context, options ...func(*options)) (broker.Broker, error) {
+func NewRabbitMQBroker(ctx context.Context, cfg Config) (broker.Broker, error) {
 	rmq := &rmqBroker{
 		ctx:    ctx,
-		config: defaultConfig.clone(),
-	}
-
-	for _, option := range options {
-		option(rmq.config)
+		config: cfg,
 	}
 
 	if err := rmq.connect(ctx); err != nil {
@@ -72,7 +68,7 @@ func (b *rmqBroker) Subscribe(ctx context.Context, sourceQueue string, handleFun
 		messageChan, err := b.startConsuming(sourceQueue)
 		if err != nil {
 			log.Errorf("failed to start consuming: %v", err)
-			time.Sleep(time.Duration(b.config.timeout) * time.Second)
+			time.Sleep(time.Duration(b.config.Timeout) * time.Second)
 
 			continue
 		}
@@ -143,7 +139,7 @@ func (b *rmqBroker) Publish(ctx context.Context, destinationQueue string, messag
 	// and the library drops a confirmation nobody reads within five seconds.
 	dc, err := ch.PublishWithDeferredConfirmWithContext(
 		ctx,
-		b.config.exchange,
+		b.config.Exchange,
 		destinationQueue,
 		false,
 		false,
@@ -413,7 +409,7 @@ func (b *rmqBroker) handleDelivery(ctx context.Context, sourceQueue string, deli
 // A grace of 0 keeps the old behaviour, where the handler stops with ctx.
 func (b *rmqBroker) handlerContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	hctx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	grace := b.config.shutdownGrace
+	grace := b.config.ShutdownGrace
 
 	var (
 		timerMu sync.Mutex
@@ -592,7 +588,7 @@ func (b *rmqBroker) dialBlocking(ctx context.Context) (*brokerConn, error) {
 			return conn, nil
 		},
 	}
-	if b.config.ssl {
+	if b.config.SSL {
 		tlsConf, err := b.config.setupTLSConfig()
 		if err != nil {
 			return nil, err
@@ -623,9 +619,9 @@ func (b *rmqBroker) openChannels(connection *amqp.Connection) (*brokerConn, erro
 		return nil, fmt.Errorf("failed to create consume channel: %w", err)
 	}
 
-	if b.config.prefetchCount > 0 {
-		if err := consumeChannel.Qos(b.config.prefetchCount, 0, false); err != nil {
-			return nil, fmt.Errorf("failed to set consume channel QoS to %d: %w", b.config.prefetchCount, err)
+	if b.config.PrefetchCount > 0 {
+		if err := consumeChannel.Qos(b.config.PrefetchCount, 0, false); err != nil {
+			return nil, fmt.Errorf("failed to set consume channel QoS to %d: %w", b.config.PrefetchCount, err)
 		}
 	}
 

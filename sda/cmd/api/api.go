@@ -18,15 +18,16 @@ import (
 	"github.com/lestrrat-go/jwx/v4/jwk"
 	apiconfig "github.com/neicnordic/sensitive-data-archive/cmd/api/config"
 	"github.com/neicnordic/sensitive-data-archive/internal/audit"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
-	"github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	"github.com/neicnordic/sensitive-data-archive/internal/brokerconfig/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/jsonadapter"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
 	"github.com/neicnordic/sensitive-data-archive/internal/userauth"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/pkg/broker/v2/rabbitmq"
+	"github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -93,7 +94,7 @@ func run() error {
 		return errors.Join(errors.New("database schema v28 is required"), err)
 	}
 
-	mq, err := rabbitmq.NewRabbitMQBroker(ctx)
+	mq, err := rabbitmq.NewRabbitMQBroker(ctx, brokerconfig.Config())
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}

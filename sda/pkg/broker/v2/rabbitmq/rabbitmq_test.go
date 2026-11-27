@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 	amqp "github.com/rabbitmq/amqp091-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -59,7 +59,7 @@ func errorHandle(_ context.Context, _ *broker.Message) ([]func(), error) {
 func newTestBroker() *rmqBroker {
 	return &rmqBroker{
 		ctx:    context.Background(),
-		config: defaultConfig.clone(),
+		config: DefaultConfig(),
 	}
 }
 
@@ -161,7 +161,7 @@ func TestRabbitMQ_EmptyBodyAndHeaders(t *testing.T) {
 
 func TestRabbitMQ_HandlerContextOutlivesCancelByGrace(t *testing.T) {
 	b := newTestBroker()
-	b.config.shutdownGrace = time.Second
+	b.config.ShutdownGrace = time.Second
 	ctx, cancel := context.WithCancel(context.Background())
 
 	hctx, done := b.handlerContext(ctx)
@@ -175,7 +175,7 @@ func TestRabbitMQ_HandlerContextOutlivesCancelByGrace(t *testing.T) {
 
 func TestRabbitMQ_HandlerContextWithoutGraceFollowsParent(t *testing.T) {
 	b := newTestBroker()
-	b.config.shutdownGrace = 0
+	b.config.ShutdownGrace = 0
 	ctx, cancel := context.WithCancel(context.Background())
 
 	hctx, done := b.handlerContext(ctx)
@@ -188,7 +188,7 @@ func TestRabbitMQ_HandlerContextWithoutGraceFollowsParent(t *testing.T) {
 func TestRabbitMQ_HandleDeliveryRunsOnUncancelledContext(t *testing.T) {
 	ack := &mockAckNack{}
 	b := newTestBroker()
-	b.config.shutdownGrace = 5 * time.Second
+	b.config.ShutdownGrace = 5 * time.Second
 	delivery := makeDelivery(ack, "key-4", []byte(`{}`), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -233,11 +233,11 @@ func hangingBroker(t *testing.T) (*rmqBroker, *atomic.Int32, <-chan struct{}) {
 	}()
 
 	b := newTestBroker()
-	b.config.host = "127.0.0.1"
-	b.config.port = l.Addr().(*net.TCPAddr).Port
-	b.config.user = "guest"
-	b.config.password = "guest"
-	b.config.vhost = "/"
+	b.config.Host = "127.0.0.1"
+	b.config.Port = l.Addr().(*net.TCPAddr).Port
+	b.config.User = "guest"
+	b.config.Password = "guest"
+	b.config.VHost = "/"
 
 	return b, &accepted, acceptedCh
 }

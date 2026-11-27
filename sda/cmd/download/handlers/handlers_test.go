@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/middleware"
 	"github.com/neicnordic/sensitive-data-archive/cmd/download/reencrypt"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	configv2 "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"

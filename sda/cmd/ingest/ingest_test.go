@@ -16,11 +16,11 @@ import (
 	"github.com/neicnordic/crypt4gh/model/headers"
 	"github.com/neicnordic/crypt4gh/streaming"
 	ingestconf "github.com/neicnordic/sensitive-data-archive/cmd/ingest/config"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/helper"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/storageerrors"
 	"github.com/neicnordic/sensitive-data-archive/mocks"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
 	"github.com/stretchr/testify/mock"
 
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"

@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	config "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
+	config "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"google.golang.org/grpc/credentials"

@@ -19,15 +19,16 @@ import (
 
 	"github.com/neicnordic/crypt4gh/model/headers"
 	syncconf "github.com/neicnordic/sensitive-data-archive/cmd/sync/config"
-	broker "github.com/neicnordic/sensitive-data-archive/internal/broker/v2"
-	"github.com/neicnordic/sensitive-data-archive/internal/broker/v2/rabbitmq"
+	"github.com/neicnordic/sensitive-data-archive/internal/brokerconfig/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/config"
-	configv2 "github.com/neicnordic/sensitive-data-archive/internal/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/database"
 	"github.com/neicnordic/sensitive-data-archive/internal/database/postgres"
 	"github.com/neicnordic/sensitive-data-archive/internal/schema"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2"
 	"github.com/neicnordic/sensitive-data-archive/internal/storage/v2/locationbroker"
+	broker "github.com/neicnordic/sensitive-data-archive/pkg/broker/v2"
+	"github.com/neicnordic/sensitive-data-archive/pkg/broker/v2/rabbitmq"
+	configv2 "github.com/neicnordic/sensitive-data-archive/pkg/config/v2"
 	"github.com/neicnordic/sensitive-data-archive/pkg/observability"
 	log "github.com/sirupsen/logrus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -121,7 +122,7 @@ func run() error {
 		return fmt.Errorf("failed to get c4gh key from config, due to: %v", err)
 	}
 
-	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx)
+	app.broker, err = rabbitmq.NewRabbitMQBroker(ctx, brokerconfig.Config())
 	if err != nil {
 		return fmt.Errorf("failed to initialize mq broker, due to: %v", err)
 	}
