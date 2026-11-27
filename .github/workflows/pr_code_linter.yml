@@ -1,52 +1,41 @@
 name: Linter
 
+# Called by the PR workflow, whose `changes` job selects the modules a change touches
 on:
-  pull_request:
-    paths:
-      - '**.go'
-      - '**/go.*'
+  workflow_call:
+    inputs:
+      sda:
+        type: boolean
+        default: false
+      download:
+        type: boolean
+        default: false
+      admin:
+        type: boolean
+        default: false
+      validator:
+        type: boolean
+        default: false
 
 env:
   go-version: '1.27'
   go-version-validator-orchestrator: '1.27'
 
 jobs:
-  check_changes:
-    outputs:
-      sda-download: ${{ steps.changes.outputs.sda-download }}
-      sda-admin: ${{ steps.changes.outputs.sda-admin }}
-      sda: ${{ steps.changes.outputs.sda }}
-      sda-validator-orchestrator: ${{ steps.changes.outputs.sda-validator-orchestrator }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: dorny/paths-filter@v4
-        id: changes
-        with:
-          filters: |
-            sda-download:
-            - 'sda-download/**'
-            sda-admin:
-            - 'sda-admin/**'
-            sda:
-            - 'sda/**'
-            sda-validator-orchestrator:
-            - 'sda-validator/**'
-
   lint_sda_download:
-    needs: check_changes
-    if: needs.check_changes.outputs.sda-download == 'true'
+    if: inputs.download
     name: Lint download code
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
+
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda-download/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
@@ -56,19 +45,19 @@ jobs:
           working-directory: sda-download
 
   lint_sda:
-    needs: check_changes
-    if: needs.check_changes.outputs.sda == 'true'
+    if: inputs.sda
     name: Lint sda code
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
+
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
@@ -78,19 +67,19 @@ jobs:
           working-directory: sda
 
   lint_sda_validator_orchestrator:
-    needs: check_changes
-    if: needs.check_changes.outputs.sda-validator-orchestrator == 'true'
+    if: inputs.validator
     name: Lint sda validator orchestrator
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
+
       - name: Set up Go ${{ env.go-version-validator-orchestrator }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version-validator-orchestrator }}
+          cache-dependency-path: sda-validator/orchestrator/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
@@ -100,19 +89,19 @@ jobs:
           working-directory: sda-validator/orchestrator
 
   lint_sda_admin:
-    needs: check_changes
-    if: needs.check_changes.outputs.sda-admin == 'true'
+    if: inputs.admin
     name: Lint sda-admin code
     runs-on: ubuntu-latest
     steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v7
+
       - name: Set up Go ${{ env.go-version }}
         uses: actions/setup-go@v7
         with:
           go-version: ${{ env.go-version }}
+          cache-dependency-path: sda-admin/go.sum
         id: go
-
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v7
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
