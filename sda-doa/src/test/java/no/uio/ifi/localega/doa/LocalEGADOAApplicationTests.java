@@ -23,6 +23,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManagerFactory;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -30,7 +32,11 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateFactory;
+import java.util.Collection;
 import java.util.UUID;
 
 @Slf4j
@@ -373,10 +379,30 @@ class LocalEGADOAApplicationTests {
         }
     }
     @SneakyThrows
+    SSLContext trustManagerForCertificate(String caCertPath) {
+        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509");
+        Collection<? extends Certificate> certificates;
+        try (InputStream in = new FileInputStream(caCertPath)) {
+            certificates = certificateFactory.generateCertificates(in);
+        }
+        KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
+        keyStore.load(null, null);
+        for (Certificate certificate : certificates) {
+            keyStore.setCertificateEntry(UUID.randomUUID().toString(), certificate);
+        }
+        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+        trustManagerFactory.init(keyStore);
+        SSLContext sslContext = SSLContext.getInstance("TLSv1.2");
+        sslContext.init(null, trustManagerFactory.getTrustManagers(), null);
+        return sslContext;
+    }
+
+    @SneakyThrows
     void export(String id, boolean dataset, String token) {
         String mqConnectionString = "amqps://guest:guest@rabbitmq:5671/sda";
         ConnectionFactory factory = new ConnectionFactory();
         factory.setUri(mqConnectionString);
+        factory.useSslProtocol(trustManagerForCertificate("/certs/ca.crt"));
         com.rabbitmq.client.Connection connectionFactory = factory.newConnection();
         Channel channel = connectionFactory.createChannel();
         AMQP.BasicProperties properties = new AMQP.BasicProperties()
